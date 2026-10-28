@@ -1,0 +1,57 @@
+// Copyright 2026 OpenHW Group
+// Solderpad Hardware License, Version 2.1, see LICENSE.md for details.
+// SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+//
+// Smoke regression: boot modes and the pad routes with an app that uses them.
+//   python ci/run_flow.py ci/regressions/smoke.hjson [--tags boot] [--list]
+{
+  // One mcu-gen + elaboration for the whole run
+  build: {
+    x_heep_cfg: "configs/general.hjson"
+    pads_cfg:   "configs/pad_cfg.py"
+    defines:    {}
+    simulator:  { name: "verilator", build_args: [], run_args: [] }
+  }
+
+  // Merged into every test (dicts merge, lists add up)
+  defaults: {
+    timeout_s: 600
+    sw:  { compiler: "gcc", compiler_prefix: "riscv32-corev-", linker: "on_chip" }
+    sim: { boot: "backdoor", max_sim_time: "10ms" }
+  }
+
+  tests: [
+    {
+      name: "hello_backdoor"
+      tags: ["smoke", "boot"]
+      sw:  { project: "hello_world" }
+      sim: { plusargs: ["+uart_expect=hello"] }
+    }
+    {
+      name: "hello_flash"
+      tags: ["smoke", "boot"]
+      sw:  { project: "hello_world", linker: "flash_load" }
+      sim: { boot: "flash", plusargs: ["+uart_expect=hello"] }
+    }
+    {
+      name: "hello_jtag"
+      tags: ["smoke", "boot", "jtag"]
+      sw:  { project: "hello_world" }
+      sim: { boot: "jtag", max_sim_time: "100ms", plusargs: ["+uart_expect=hello", "+jtag_verify"] }
+    }
+    {
+      // GPIO 30 looped back to GPIO 31 by the GPIO driver; GPIO 30 must toggle
+      name: "gpio_intr"
+      tags: ["smoke", "gpio"]
+      sw:  { project: "example_gpio_intr" }
+      sim: { tb_route: "gpio", plusargs: ["+gpio_expect_toggle=40000000"] }
+    }
+    {
+      // SPI host looped back to the debug SPI slave
+      name: "spi_slave_loopback"
+      tags: ["smoke", "spi"]
+      sw:  { project: "example_spi_slave" }
+      sim: { tb_route: "spi_slave" }
+    }
+  ]
+}
