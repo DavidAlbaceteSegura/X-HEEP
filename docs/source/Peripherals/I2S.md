@@ -190,11 +190,11 @@ Simulation enables all three tests by default. The FPGA TX test needs no
 microphone. Build it with:
 
 ```sh
-make app PROJECT=example_i2s TARGET=pynq-z2 LINKER=on_chip
+make app PROJECT=example_i2s TARGET=pynq-z2 LINKER=flash_load
 ```
 
-Load and run `sw/build/main.elf` using the [FPGA debugging workflow](../How_to/Debug.md).
-A subsequent simulation application build overwrites this same ELF, so rebuild
+Program the flash and boot from it as described in [ExecuteFromFlash](../How_to/ExecuteFromFlash.md).
+A subsequent simulation application build overwrites the same build output, so rebuild
 for `pynq-z2` before loading it on the board. A healthy FPGA TX test prints
 `I2S TX: repeating 12 words, 32-bit I2S, divider 8. Reset to stop.` and remains in
 its error-monitoring loop. It does not print a completion message.

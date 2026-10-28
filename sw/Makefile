@@ -27,7 +27,6 @@ VERBOSE ?= false
 # riscv toolchain install path
 RISCV_XHEEP			 ?= ~/.riscv
 RISCV_EXE_PREFIX	= $(RISCV_XHEEP)/bin/${COMPILER_PREFIX}elf-
-RISCV_GDB_PATH		= $(RISCV_EXE_PREFIX)gdb
 
 ifneq ($(filter environment command line override, $(origin RISCV_XHEEP)),)
   $(shell printf '\033[1;32mINFO: Using RISCV_XHEEP from environment or command line: %s\033[0m\n' '$(RISCV_XHEEP)' >&2)
@@ -67,7 +66,3 @@ export
 
 # Let's CMake!
 include cmake/targets.mak
-
-# GDB connection using RISCV-GDB back-end
-gdb_connect:
-	  $(RISCV_GDB_PATH) build/main.elf -x gdbInit;

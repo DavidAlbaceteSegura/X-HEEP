@@ -31,7 +31,7 @@ class Simulator:
         :param str name: The name of the simulator.
         :param str error_pattern: The pattern to look for in the output of the simulator. This
             pattern should contain a group that captures the return value of the program. For
-            example, "Program Finished with value (\d+)".
+            example, the result code in the "[TB] RESULT: ... code=<n>" line.
         """
         self.name = name
         self.error_pattern = error_pattern
@@ -70,7 +70,9 @@ class Simulator:
                 flush=True,
             )
 
-    def run_app(self, an_app, simulation_timeout, dry_run=False, verbose=True):
+    def run_app(
+        self, an_app, simulation_timeout, dry_run=False, verbose=True, make_args=None
+    ):
         """
         Runs an_app with the simulator. Checks if it times out. Outputs if it finishes with errors or
         without.
@@ -79,6 +81,7 @@ class Simulator:
         :param int simulation_timeout: The timeout for the simulation in seconds.
         :param bool dry_run: If True, only print the simulation command without executing it.
         :param bool verbose: If True, print detailed messages about the simulation process.
+        :param list make_args: Extra make variables for the run, e.g. ["TB_ROUTE=gpio"].
 
         :return: SimResult for the simulation of an_app.
         """
@@ -93,14 +96,16 @@ class Simulator:
         if dry_run:
             if verbose:
                 print(
-                    BColors.OKCYAN + f"[DRY RUN] make {self.name}-run" + BColors.ENDC,
+                    BColors.OKCYAN
+                    + f"[DRY RUN] make {self.name}-run {' '.join(make_args or [])}"
+                    + BColors.ENDC,
                     flush=True,
                 )
             return SimResult.PASSED
 
         try:
             run_output = subprocess.run(
-                ["make", f"{self.name}-run"],
+                ["make", f"{self.name}-run"] + (make_args or []),
                 capture_output=True,
                 timeout=simulation_timeout,
                 check=False,

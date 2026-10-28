@@ -23,28 +23,21 @@ Below, a description of the three modes is provided.
 ### JTAG Boot Procedure
 
 In this boot procedure, when the CPU enters the boot rom,
-it loops forever. The JTAG programmer (e.g., openOCD) must
-load the memory as described in `Debug.md` and set the
-booting address. During this procedure, the CPU runs
-in `debug mode` until the JTAG (e.g., GDB) tells it to start
-executing the code.
+it loops until the memory-mapped `BOOT_EXIT_LOOP` flag of `soc_ctrl` is set.
+An external JTAG debugger must load the memory through the debug module,
+then set the flag. The CPU then jumps to the `boot_address`, a memory-mapped
+register that is set to 0x180 at reset time, which is also the boot address
+specified in the entry point of the linker scripts.
 
 To use this mode, when targeting ASICs or FPGA bitstreams,
 make sure you have the `boot_sel_i` input (e.g., a switch) set to 0,
 and connect the JTAG cable to the microcontroller.
 
-The `Debug.md` guide gives details about how to program the microcontroller
-in this mode.
-
-For simulation targets, by default, the testbench uses this mode.
-However, this procedure is very slow. For this reason, we use pre-loading instead.
-While the CPU loops in the boot rom, it also checks a memory mapped flag that
-the testbench can set to 1 after pre-loading the memories.
-Then it loads the `boot_address` from a memory-mapped register that is set to
-0x180 at reset time, which is also the boot address specified in the entry point of the
-linked scripts.
-If you want to simulate the actual JTAG procedure without pre-loading instead,
-compile the RTL with the `FUSESOC_PARAM="--JTAG_DPI=1"` flag and follow the `Debug.md` guide.
+In simulation the testbench preloads the memories and sets the flag by
+default (`+boot=backdoor`), because a JTAG transfer is slow. To simulate the
+actual JTAG procedure, run with `+boot=jtag` (`make verilator-run BOOT=jtag`):
+the testbench JTAG driver then loads the firmware through the debug module and
+sets the flag, as an external debugger would. See [Testbench](Testbench.md).
 
 
 ### SPI Flash Loading Boot Procedure
@@ -67,11 +60,11 @@ make app LINKER=flash_load
 or
 make app PROJECT=gpio_pmw LINKER=flash_load
 ```
-Then, when launching the simulation, pass the argument `boot_sel=1`
-to set the `boot_sel_i` input to `1`.
+Then, when launching the simulation, pass the argument `boot=flash`
+(or the legacy `boot_sel=1`) to set the `boot_sel_i` input to `1`.
 
 ```
-make run PLUSARGS="c firmware=../../../sw/build/main.hex boot_sel=1"
+make run PLUSARGS="c firmware=../../../sw/build/main.hex boot=flash"
 ```
 
 If you are using FPGAs or ASIC, make sure to program the FLASH first (while in simulation, the FLASH model will load the binary by itself).

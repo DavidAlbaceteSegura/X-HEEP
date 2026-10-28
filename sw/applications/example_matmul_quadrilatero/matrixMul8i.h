@@ -1,1 +1,0 @@
-../../../hw/vendor/pulp_platform/quadrilatero/sw/quadrilatero_matmul/matrixMul8i.h

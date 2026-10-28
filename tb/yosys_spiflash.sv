@@ -47,16 +47,15 @@
 // Davide Schiavone davide.schiavone@epfl.ch
 // Converted to SystemVerilog and made it compatible with Verilator for Single-Mode SPI
 // Memory Init is done in a separated task not part of this file
-// CAREFULL!!!! DUAL and QUAD SPI Flash Model doesnt work with Verilator
-// This is because it requires to model Hi-Z, which are not supported (yet?)
+// The io pins are split into input/output/output-enable so that the
+// tristate resolution is done by the testbench interconnect (vinterconnect).
 
 module spiflash (
-    input wire csb,
-    input wire clk,
-    inout wire io0,  // MOSI
-    inout wire io1,  // MISO
-    inout wire io2,
-    inout wire io3
+    input  wire       csb,
+    input  wire       clk,
+    input  wire [3:0] io_i,  // [0]: MOSI, [1]: MISO
+    output wire [3:0] io_o,
+    output wire [3:0] io_oe
 );
   localparam verbose = 0;
   localparam integer latency = 4;
@@ -107,10 +106,13 @@ module spiflash (
   logic io2_dout = 0;
   logic io3_dout = 0;
 
-  assign io0 = io0_oe ? io0_dout : 1'bz;
-  assign io1 = io1_oe ? io1_dout : 1'bz;
-  assign io2 = io2_oe ? io2_dout : 1'bz;
-  assign io3 = io3_oe ? io3_dout : 1'bz;
+  assign io_o  = {io3_dout, io2_dout, io1_dout, io0_dout};
+  assign io_oe = {io3_oe, io2_oe, io1_oe, io0_oe};
+
+  wire io0 = io_i[0];
+  wire io1 = io_i[1];
+  wire io2 = io_i[2];
+  wire io3 = io_i[3];
 
   wire io0_delayed;
   wire io1_delayed;

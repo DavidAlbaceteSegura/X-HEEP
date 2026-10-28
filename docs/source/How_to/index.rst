@@ -8,14 +8,13 @@ Here you can find a list of guides that describe in detail how to use X-HEEP.
 
    CompileApps
    Simulate
-   Debug
+   Testbench
    IntegratePeripheral
    RegGenerator
    ExecuteFromFlash
    ProgramFlash
    IDEs
    Profiling
-   SystemC
    AnalogMixedSignal
    AreaPlot
    ImplementASIC

@@ -63,7 +63,7 @@ Full documentation is available on [Read the Docs](https://x-heep.readthedocs.io
 | [FPGA](https://x-heep.readthedocs.io/en/latest/FPGA/index.html) | Running on FPGA boards, bitstream generation, debugging with ILA |
 | [ASIC](https://x-heep.readthedocs.io/en/latest/ASIC/index.html) | ASIC implementations (HEEPocrates, HEEPnosis, X-TRELA, and more) |
 | [Extending](https://x-heep.readthedocs.io/en/latest/Extending/index.html) | Adding custom hardware accelerators and software |
-| [Testing](https://x-heep.readthedocs.io/en/latest/Testing/index.html) | CI workflows, VerifHeep verification library |
+| [Testing](https://x-heep.readthedocs.io/en/latest/Testing/index.html) | CI workflows and the application test suite |
 
 ---
 

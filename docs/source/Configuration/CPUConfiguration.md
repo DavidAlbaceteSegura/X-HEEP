@@ -77,7 +77,7 @@ xheep.set_xif(CvXIf(
 ```
 
 ```{warning}
-All the XIF parameters are hardwired to their default values (shown above) in `cv32e20`, so be sure to match this X-XIF configuration when using this core. Modifying `x_num_rs` to 3 is allowed to ensure interface compatibility with Quadrilatero and the FPU subsystem in `testharness.sv`, though the core only offloads two source operands (i.e., R4-type instructions are not supported). Select the `cv32e40x` core if you need full X-IF configurability.
+All the XIF parameters are hardwired to their default values (shown above) in `cv32e20`, so be sure to match this X-XIF configuration when using this core. Modifying `x_num_rs` to 3 is allowed for interface compatibility with coprocessors that expect it, though the core only offloads two source operands (i.e., R4-type instructions are not supported). Select the `cv32e40x` core if you need full X-IF configurability.
 ```
 
 ### cv32e40p CPU configuration

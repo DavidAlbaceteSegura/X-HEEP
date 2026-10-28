@@ -72,7 +72,6 @@ filesets:
   tb-utils:
     depend:
     - x-heep::tb-utils
-    - x-heep::tb-fpu-utils
 
   files_verilator_waiver:
     depend:
@@ -122,22 +121,6 @@ filesets:
     - scripts/sim/modelsim/post_build_modelsim_vopt.sh
     file_type: user
 
-  pre_build_remote_bitbang:
-    files:
-    - scripts/sim/compile_remote_bitbang.sh
-    file_type: user
-
-  pre_build_uartdpi:
-    files:
-    - scripts/sim/compile_uart_dpi.sh
-    file_type: user
-
-  cfile_uartdpi:
-    files:
-    - ./hw/vendor/lowrisc/opentitan/hw/dv/dpi/uartdpi/uartdpi.c
-    - ./hw/vendor/lowrisc/opentitan/hw/dv/dpi/uartdpi/uartdpi.h: { is_include_file: true }
-    file_type: cSource
-
   pre_patch_modelsim_Makefile:
     files:
     - scripts/sim/modelsim/patch_modelsim_Makefile.py
@@ -148,24 +131,10 @@ filesets:
     - scripts/sim/vcs/patch_vcs_ams_Makefile.py
     file_type: user
 
-  tb-verilator:
-    files:
-    - tb/XHEEP_CmdLineOptions.hh: { is_include_file: true }
-    - tb/XHEEP_CmdLineOptions.cpp
-    - tb/tb_top.cpp
-    file_type: cppSource
-
   tb-sv:
     files:
     - tb/tb_top.sv
     file_type: systemVerilogSource
-
-  tb-sc-verilator:
-    files:
-    - tb/XHEEP_CmdLineOptions.hh: { is_include_file: true }
-    - tb/XHEEP_CmdLineOptions.cpp
-    - tb/tb_sc_top.cpp
-    file_type: cppSource
 
   openroad_base_files:
     files:
@@ -179,18 +148,6 @@ filesets:
       - hw/asic/sky130/constraint.sdc : {file_type: SDC}
 
 parameters:
-  JTAG_DPI:
-    datatype: int
-    paramtype: vlogparam
-    description: |
-      Enables testbench JTAG DIPs. Admitted values: 1|0.
-    default: 0
-  USE_EXTERNAL_DEVICE_EXAMPLE:
-    datatype: int
-    paramtype: vlogparam
-    description: |
-      Enables testbench modules compilation. Admitted values: 1|0.
-    default: 1
   USE_UPF:
     datatype: bool
     paramtype: vlogdefine
@@ -206,10 +163,6 @@ parameters:
     paramtype: vlogdefine
     default: false
   VERILATOR: #used by SV2V
-    datatype: bool
-    paramtype: vlogdefine
-    default: false
-  SIM_SYSTEMC:
     datatype: bool
     paramtype: vlogdefine
     default: false
@@ -265,10 +218,10 @@ parameters:
     paramtype: vlogdefine
     description: |
       Include the Vitis HLS-generated dot_product example accelerator in
-      the testbench. Enable with `--flag use_hls_example`, which also
+      the FPGA designs. Enable with `--flag use_hls_example`, which also
       triggers the generate_hls_dot_product pre-build hook (runs Vitis
       HLS) and pulls in epfl:ip:dot_product -- so without the flag,
-      building/simulating X-HEEP never requires Vitis HLS to be installed.
+      building X-HEEP never requires Vitis HLS to be installed.
     default: false
 
 scripts:
@@ -277,14 +230,6 @@ scripts:
     cmd:
     - sh
     - ../../../scripts/sim/modelsim/post_build_modelsim_vopt.sh
-  pre_build_remote_bitbang:
-    cmd:
-    - sh
-    - ../../../scripts/sim/compile_remote_bitbang.sh
-  pre_build_uartdpi:
-    cmd:
-    - sh
-    - ../../../scripts/sim/compile_uart_dpi.sh
   pre_patch_modelsim_Makefile:
     cmd:
     - python
@@ -314,7 +259,6 @@ targets:
     filesets:
     - files_rtl_generic
     - target_sim ? (tool_verilator? (files_verilator_waiver))
-    - target_sim_sc ? (tool_verilator? (files_verilator_waiver))
     toplevel: [core_v_mini_mcu]
 
   sim:
@@ -323,44 +267,23 @@ targets:
     filesets_append:
     - tb-utils
     - rtl-simulation
-    - tool_modelsim? (pre_build_remote_bitbang)
-    - tool_modelsim? (pre_build_uartdpi)
     - tool_modelsim? (pre_patch_modelsim_Makefile)
-    - tool_vcs? (cfile_uartdpi)
-    - tool_vcs? (pre_build_remote_bitbang)
-    - tool_xcelium? (pre_build_remote_bitbang)
-    - tool_xcelium? (pre_build_uartdpi)
-    - tool_verilator? (tb-verilator)
-    - tool_modelsim? (tb-sv)
-    - tool_vcs? (tb-sv)
-    - tool_xcelium? (tb-sv)
+    - tb-sv
     - "!integrated_heep? (x_heep_system)"
-    toplevel:
-    - tool_modelsim? (tb_top)
-    - tool_vcs? (tb_top)
-    - tool_xcelium? (tb_top)
-    - tool_verilator? (testharness)
+    toplevel: [tb_top]
     hooks:
       pre_build:
-        - tool_modelsim? (pre_build_uartdpi)
-        - tool_modelsim? (pre_build_remote_bitbang)
         - tool_modelsim? (pre_patch_modelsim_Makefile) # this is required by Questa 2020 on
         - ams_sim? (pre_patch_vcs_ams_Makefile)
-        - tool_xcelium? (pre_build_uartdpi)
-        - tool_xcelium? (pre_build_remote_bitbang)
-        - use_hls_example? (generate_hls_dot_product)
       pre_run:
         - remove_uart_log
       post_run:
         - print_uart_log
     parameters:
-    - JTAG_DPI
-    - USE_EXTERNAL_DEVICE_EXAMPLE
     - USE_UPF
     - REMOVE_OBI_FIFO
     - COMMON_CELLS_ASSERTS_OFF
     - ASSERTS_OFF
-    - use_hls_example ? (USE_HLS_EXAMPLE=true)
     tools:
       modelsim:
         vlog_options:
@@ -371,8 +294,6 @@ targets:
         - -pedanticerrors
         - -define MODELSIM
         vsim_options:
-        - -sv_lib ../../../hw/vendor/lowrisc/opentitan/hw/dv/dpi/uartdpi/uartdpi
-        - -sv_lib ../../../hw/vendor/pulp_platform/pulpissimo/rtl/tb/remote_bitbang/librbs
         - -voptargs=+acc=npr
       vcs:
         vcs_options:
@@ -394,79 +315,27 @@ targets:
       xcelium:
         xrun_options:
         - -vtimescale 1ns/10ps
-        - -sv_lib ../../../hw/vendor/lowrisc/opentitan/hw/dv/dpi/uartdpi/uartdpi.so
-        - -sv_lib ../../../hw/vendor/pulp_platform/pulpissimo/rtl/tb/remote_bitbang/librbs.so
         - -define XCELIUM
       verilator:
-        mode: cc
+        # tb_top runs the simulation flow, so the model is built as a
+        # standalone binary with timing support (--binary --timing).
+        mode: binary
         verilator_options:
           - '--sv'
-          - '--cc'
-          - '--trace'
+          - '--timing'
+          - '--timescale 1ns/1ps'
           - '--trace-fst'
           - '--trace-structs'
           - '--trace-params'
           - '--trace-max-array 1024'
           - '--x-assign unique'
           - '--x-initial unique'
-          # Vitis HLS-generated RTL (e.g. hw/fpga/hls/vitis/dot_product) uses
-          # zero-time delay statements in a couple of small pipeline flow
-          # control modules, purely as a simulation-only race-avoidance
-          # trick with no real timing meaning. Verilator 5.x requires an
-          # explicit choice of how to handle any delay/event control it
-          # sees; --no-timing tells it to treat them as zero-time, which is
-          # exactly what they already are.
-          - '--no-timing'
-          # Direct, expected consequence of --no-timing above: Verilator
-          # notes (as a warning) every delay statement it's ignoring. Not
-          # actionable -- that's exactly what we asked it to do.
-          - '-Wno-STMTDLY'
-          - '--exe tb_top.cpp'
           - '-CFLAGS "-Wall -fpermissive"'
-          - '-LDFLAGS "-pthread -lutil -lelf"'
+          - '-LDFLAGS "-pthread -lutil"'
           - "-Wall"
         make_options:
           # Use the number of available cores (up to a max of 8) for parallel compilation, with a fallback to 4 if nproc is not available
           - '-j$(shell N=$$(nproc 2>/dev/null || echo 4); [ "$$N" -le 8 ] && echo "$$N" || echo 8)'
-
-  sim_sc:
-    <<: *default_target
-    default_tool: verilator
-    filesets_append:
-    - tb-utils
-    - rtl-simulation
-    - tool_verilator? (tb-sc-verilator)
-    - "!integrated_heep? (x_heep_system)"
-    toplevel:
-    - tool_verilator? (testharness)
-    parameters:
-    - JTAG_DPI
-    - USE_EXTERNAL_DEVICE_EXAMPLE
-    - USE_UPF
-    - REMOVE_OBI_FIFO
-    - SIM_SYSTEMC=true
-    - COMMON_CELLS_ASSERTS_OFF
-    - ASSERTS_OFF
-    hooks:
-      pre_run:
-        - remove_uart_log
-      post_run:
-        - print_uart_log
-    tools:
-      verilator:
-        mode: sc
-        verilator_options:
-          - '--sc'
-          - '--trace'
-          - '--trace-structs'
-          - '--trace-params'
-          - '--trace-max-array 1024'
-          - '--x-assign unique'
-          - '--x-initial unique'
-          - '--exe tb_sc_top.cpp'
-          - '-CFLAGS "-Wall -std=c++14 -fpermissive"'
-          - '-LDFLAGS "-pthread -lutil -lelf"'
-          - "-Wall"
 
   nexys-a7-100t:
     <<: *default_target

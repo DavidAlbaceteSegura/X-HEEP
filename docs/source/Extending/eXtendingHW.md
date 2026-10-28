@@ -16,10 +16,6 @@ The following is an example repository folder structure.
     │       ├── esl_epfl_x_heep
     │       └── esl_epfl_x_heep.vendor.hjson
     ├── top.core
-    ├── scripts
-    │   └── sim
-    │       ├── compile_remote_bitbang.sh
-    │       └── compile_uart_dpi.sh
     ├── tb
     │   └── testharness.sv
     ├── util
@@ -118,26 +114,12 @@ To add this new top-level module to the simulation/synthesis flow you can extend
         file_type: systemVerilogSource
 
     # Scripts for hooks
-    pre_build_uartdpi:
-        files:
-        - scripts/sim/compile_uart_dpi.sh  # Your modified scripts
-        file_type: user
-
-    pre_build_remote_bitbang:
-        files:
-        - scripts/sim/compile_remote_bitbang.sh  # Your modified scripts
-        file_type: user
-
     pre_patch_modelsim_Makefile:
         files:
         - hw/vendor/esl-epfl_x-heep/scripts/sim/modelsim/patch_modelsim_Makefile.py
         file_type: user
 
     parameters:
-    JTAG_DPI:
-        datatype: int
-        paramtype: vlogparam
-        default: 0
     USE_UPF:
       datatype: bool
       paramtype: vlogdefine
@@ -145,14 +127,6 @@ To add this new top-level module to the simulation/synthesis flow you can extend
         Enables simulation with UPF with Modelsim/VCS
 
     scripts:
-    pre_build_remote_bitbang:
-        cmd:
-        - sh
-        - ../../../scripts/sim/compile_remote_bitbang.sh
-    pre_build_uartdpi:
-        cmd:
-        - sh
-        - ../../../scripts/sim/compile_uart_dpi.sh
     pre_patch_modelsim_Makefile:
         cmd:
         - python
@@ -168,18 +142,12 @@ To add this new top-level module to the simulation/synthesis flow you can extend
         default_tool: modelsim
         filesets_append:
         - tb
-        - tool_modelsim? (pre_build_remote_bitbang)
-        - tool_modelsim? (pre_build_uartdpi)
         - tool_modelsim? (pre_patch_modelsim_Makefile)
         toplevel:
         - tb_top
         hooks:
         pre_build:
-            - tool_modelsim? (pre_build_uartdpi)
-            - tool_modelsim? (pre_build_remote_bitbang)
             - tool_modelsim? (pre_patch_modelsim_Makefile) # this is required by Questa 2020 on
-        parameters:
-        - JTAG_DPI
         tools:
         modelsim:
             vlog_options:
@@ -188,9 +156,6 @@ To add this new top-level module to the simulation/synthesis flow you can extend
             - -suppress vlog-2577
             - -pedanticerrors
             - -define MODELSIM
-            vsim_options:
-            - -sv_lib ../../../hw/vendor/esl-epfl_x-heep/hw/vendor/lowrisc/opentitan/hw/dv/dpi/uartdpi/uartdpi
-            - -sv_lib ../../../hw/vendor/esl-epfl_x-heep/hw/vendor/pulp_platform/pulpissimo/rtl/tb/remote_bitbang/librbs
 ```
 
 </details><br>

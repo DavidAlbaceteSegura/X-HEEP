@@ -12,12 +12,6 @@
 
 uint32_t  buffer_rnd_index[BUFF_LEN];
 
-#ifdef TARGET_SYSTEMC
-//make app PROJECT=example_ext_memory TARGET=systemc
-#define CACHE_FLUSH   1
-#define CACHE_BYPASS  2
-#define CACHE_SIZE    4*1024
-#endif
 
 #define MEMORY_SIZE           32*1024
 #define MEMORY_ADDR_MASK       0x7FFF
@@ -36,14 +30,10 @@ int main(int argc, char *argv[])
 {
 
 
-#if defined(TARGET_SIM) || defined(TARGET_SYSTEMC)
+#if defined(TARGET_SIM)
 
     uint32_t* ext_memory = (uint32_t*)EXT_SLAVE_START_ADDRESS;
 
-    #ifdef TARGET_SYSTEMC
-    //last address of systemC memory used as a configuration register to flush or bypass
-    volatile uint32_t* cache_cfg = (uint32_t*)(EXT_SLAVE_START_ADDRESS + MEMORY_SIZE - 4);
-    #endif
 
     uint32_t random_number = 0;
     uint32_t errors = 0;
@@ -121,13 +111,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    //test 4, flush and bypass
-    #ifdef TARGET_SYSTEMC
-    //make sure you store everything back to main memory and bypass the flash
-    *cache_cfg = CACHE_FLUSH;
-    *cache_cfg = CACHE_BYPASS;
-    #endif
-
+    //test 4, read back again
     for(int i=0;i<BUFF_LEN;i++){
         if (myptr1[i] != i*32) {
             printf("%d) T4: exp. %x, got %x (@%x)\n",i, i*32,myptr1[i],&myptr1[i]);

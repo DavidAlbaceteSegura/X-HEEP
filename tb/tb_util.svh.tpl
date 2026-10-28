@@ -121,8 +121,5 @@ endtask
 
 task load_flash_hex;
     input string firmware_file;
-    int i;
-    for (i=0;i<=16*1024*1024;i=i+1)
-        gen_USE_EXTERNAL_DEVICE_EXAMPLE.flash_boot_i.memory[i] = 8'h00;
-    $readmemh(firmware_file, gen_USE_EXTERNAL_DEVICE_EXAMPLE.flash_boot_i.memory);
+    vdrivers_i.flash_i.load(firmware_file);
 endtask

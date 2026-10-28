@@ -19,7 +19,7 @@ software is built with Make + CMake using a RISC-V cross-compiler.
 - `hw/` — RTL: `core-v-mini-mcu/` (SoC top), `ip/`, `ip_examples/`, `fpga/`, `asic/`, `simulation/`, `system/` (SoC + pad ring), `vendor/` (vendored third-party IPs).
 - `sw/` — Software: applications, drivers, SDK, linker scripts.
 - `tb/` — Testbench (`tb_top.sv`, `testharness.sv`) and C++ simulation driver (`tb_top.cpp`).
-- `test/` — Test scripts: `test_apps/` (app compile+sim suite), `test_x_heep_gen/`, `verifheep/`.
+- `test/` — Test scripts: `test_apps/` (app compile+sim suite), `test_x_heep_gen/`.
 - `util/` — Python tooling: `xheep_gen/` (the generator, vendored), `vendor.py`, `c_gen.py`, Docker, profiling.
 - `scripts/` — Build/simulation helper scripts.
 - `docs/` — Sphinx documentation (`docs/source/`).
@@ -98,3 +98,22 @@ file pinning the upstream URL and commit.
 - How-to guides (simulators, debugging, FPGA, flash): `docs/source/How_to/`
 - Extending HW/SW: `docs/source/Extending/`
 - Testing: `docs/source/Testing/`
+
+## Testbench
+
+- Usage: `docs/source/How_to/Testbench.md`; plusargs: `docs/source/How_to/Simulate.md`.
+- `tb/tb_top.sv` runs the flow (boot, wait for exit, driver verdicts) in one `initial` block.
+  Drivers are in `tb/vdrivers/`, pad routing (`+tb_route`) in `tb/vinterconnect.sv`, shared
+  definitions and the error scoreboard in `tb/tb_pkg.sv`, pad indices in the generated
+  `tb/tb_pads_pkg.sv` (from `tb_pads_pkg.sv.tpl`).
+- Verilator builds `tb_top` with `--binary --timing`; there is no C++ testbench.
+- The testharness connects X-HEEP through its pads only. All other `x_heep_system` ports
+  (bus, peripheral/DMA ports, interrupts, CV-X-IF) are tied off; the exit value is read by
+  `tb_top` through the hierarchy, and the power-switch acks are looped back with a delay.
+- Pass/fail is the `[TB] RESULT: ... code=<n>` line. Apps that need pads get their route via
+  `APP_SIM_ARGS` in `test/test_apps/test_apps.py`.
+- Verilator cannot mix pullup and pulldown on one vector, so pads are split into the `pad_pu`
+  and `pad_pd` nets; keep the pull classification in `tb_pads_pkg.sv.tpl` and
+  `testharness.sv.tpl` in sync.
+- JTAG DMI reads must wait in Run-Test/Idle before the result scan, or the DTM sets a sticky
+  busy error and ignores every later access until `dmireset`.

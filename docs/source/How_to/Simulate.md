@@ -27,7 +27,7 @@ cd ./build/openhwgroup.org_systems_core-v-mini-mcu_<version>/sim-verilator
 and type to run your compiled application:
 
 ```bash
-./Vtestharness +firmware=../../../sw/build/main.hex
+./Vtb_top +firmware=../../../sw/build/main.hex
 ```
 
 Finally, you can check the output by running:
@@ -196,38 +196,73 @@ and type to run your compiled software:
 make run PLUSARGS="c firmware=../../../sw/build/main.hex"
 ```
 
+## Testbench structure
+
+The same SystemVerilog testbench is used with every simulator (Verilator runs it with `--timing`):
+
+- `tb/tb_top.sv` generates clock and reset and runs the simulation flow in a single `initial` block: boot, wait for the firmware to exit, collect the driver verdicts and end the simulation.
+- `tb/testharness.sv` (generated from `tb/testharness.sv.tpl`) instantiates X-HEEP, `vdrivers` and `vinterconnect`. X-HEEP only talks to the testbench through its pads: every other port of `x_heep_system` (bus, peripheral and DMA ports, interrupts, CV-X-IF) is tied off.
+- `tb/vdrivers/` contains one driver per pad protocol: JTAG master, UART, SPI memories (boot flash, `spi_host` and `spi2` targets), GPIO, I2C target, I2S and PDM microphones.
+- `tb/vinterconnect.sv` connects the X-HEEP pads to the drivers. JTAG, UART and the boot flash are always connected; the other pads are connected according to `+tb_route`.
+- `tb/tb_pkg.sv` holds the boot modes, routes, result codes and the scoreboard the drivers report errors to. `tb/tb_pads_pkg.sv` (generated) gives the index of every pad.
+
+At the end of the simulation the testbench prints a single result line and the simulator exits with a non-zero status on failure:
+
+```
+[TB] RESULT: PASS code=0 errors=0 warnings=0
+[TB] RESULT: FAIL code=3 (TIMEOUT) sw_exit=none errors=1 warnings=0
+```
+
+| code | meaning |
+|------|---------|
+| 0 | the firmware exited with 0 and no driver reported an error |
+| 1 | the firmware exited with a non-zero value |
+| 2 | a driver reported an error |
+| 3 | timeout (`+max_sim_time`) |
+| 4 | wrong plusargs |
+| 5 | the firmware could not be loaded (JTAG boot) |
+
 ## Simulation parameters
 
 You may pass additional simulation parameters to the generated simulation executable, in the form of *plusargs*: `+<parameter>=<value>`.
+When launching the simulation through `make verilator-run`, extra plusargs can be passed with `SIM_ARGS="..."`, and the most common ones have their own `make` variable.
 
 - `+firmware=<path>`:
-  Loads the hex file specified in `<path>` into memory.
-  This allows you to run a compiled executable directly, as if it were already written in memory since the beginning of the simulation.
-  For example, `./Vtestharness +firmware=../../../sw/build/main.hex` will launch the Verilator simulation and instruct it to load the compiled application executable into memory and run it.
+  The firmware hex file. It is always loaded into the boot flash (unless `+flash_hex` is given) and, depending on the boot mode, into the SRAM.
+  `make verilator-run` passes `+firmware=../../../sw/build/main.hex` automatically.
 
-  When launching the simulation through the dedicated `make` target, like `make verilator-run`, the `+firmware` parameter is automatically propagated to the simulation executable.
+- `+boot=<mode>` (`make` variable `BOOT`):
+  - `backdoor` (default): the testbench writes the firmware into the SRAM and releases the boot ROM loop. Fastest.
+  - `jtag`: the JTAG driver loads the firmware through the debug module System Bus Access and then writes `soc_ctrl.BOOT_EXIT_LOOP`, as an external debugger would. Add `+jtag_verify` to read every word back, and `+jtag_tck_ns=<n>` to change the TCK period (default 100 ns).
+  - `flash`: the boot ROM loads the firmware from the SPI flash driver (`boot_select = 1`). Compile the app with `LINKER=flash_load` or `LINKER=flash_exec`.
 
-- `+boot_sel=<val>`:
-  Runs the simulation booting from testbench/jtag (`val=0`) or loading the firmware from the external flash (`val=1`).
-  When `0` (by default), you can run a compiled executable directly, as if it were already written in memory since the beginning of the simulation. While if it is `1`, the code is loaded from the external flash via SPI.
-  For example, `./Vtestharness +firmware=../../../sw/build/main.hex +boot_sel=1` will launch the Verilator simulation and instruct the bootrom to copy the firmware from the external flash to the main memory, then, the CPU will jump to SRAM and execute the code.
+  The legacy `+boot_sel=0|1` is still accepted (`0` = `backdoor`, `1` = `flash`).
 
-  When launching the simulation through the dedicated `make` target, like `make verilator-run`, the `+boot_sel` parameter can be be passed to the simulation executable via the `SIM_ARGS` command-line argument, e.g. `make verilator-run SIM_ARGS="+boot_sel=1"`.
-  
-- `+max_sim_time=<time>`:
-  Runs the simulation for a maximum of `<time>` clock cycles.
-  This is useful in case your application gets stuck in a certain point and never finishes; this parameter will force the simulation to terminate after a certain time so that you can later analyze the generated `waveform.fst` (or `waveform.vcd` if using QuestaSim) file.
-  In that case, the simulation executable will exit with a return code of 2, indicating premature termination.
-  If this parameter is not provided, the simulation will run until the program finishes (the `main()` function ends).
+- `+tb_route=<route>[,<route>...]` (`make` variable `TB_ROUTE`):
+  Connects groups of pads to their driver. A pad claimed by two routes is an error, and `gpio` takes every GPIO pad left over by the other routes (e.g. `TB_ROUTE=i2c,gpio`).
 
-  Alternatively, you may add a time suffix (`s`, `ms`, `us`, `ns`, `ps`) to run the simulation until the specified simulation time has been reached (1 clock cycle = 10ns).
-  This is, `+max_sim_time=750us` is the same as `+max_sim_time=75000`.
-  (Note that there's no space between the number and the unit, and that fractional values are not supported.)
+  | route | pads | driver |
+  |-------|------|--------|
+  | `gpio` | GPIOs | `vdrv_gpio`: loopback (`+gpio_loop=<out>:<in>,...`, default `30:31`), static drive (`+gpio_drive=<mask>:<value>`), `+gpio_expect_toggle=<mask>`, `+gpio_monitor` |
+  | `i2c` | `i2c_scl/sda` | `vdrv_i2c`: register-file target at `+i2c_addr=<hex>,...` (default `48,6b,50`), `+i2c_mem=<file>`, `+i2c_expect_txn=<n>` |
+  | `spi_host` | `spi_*` | `vdrv_spi_mem`: SPI NOR flash model on CS 0 |
+  | `spi2` | `spi2_*` | `vdrv_spi_mem`: SPI NOR flash model on CS 0 |
+  | `spi_slave` | `spi_*`, `spi_slave_*` | SPI host looped back to the debug SPI slave |
+  | `i2s` | `i2s_*` | I2S microphone |
+  | `pdm2pcm` | `pdm2pcm_*` | PDM microphone |
 
-  If you're launching the Verilator simulation via `make`, you may pass this parameter via the `MAX_SIM_TIME=` command-line argument, e.g. `make verilator-run MAX_SIM_TIME=750us`.
+  Undriven pads are pulled up (I2C, UART, JTAG TMS/TRST, chip selects) or down (everything else).
 
-## Simulating the UART DPI
+- `+max_sim_time=<time>` (`make` variable `MAX_SIM_TIME`):
+  Ends the simulation with a timeout after `<time>` clock cycles, or after the given simulation time if a suffix (`s`, `ms`, `us`, `ns`, `ps`) is added (1 clock cycle = 10ns): `+max_sim_time=750us` is the same as `+max_sim_time=75000`. Without it the simulation runs until the firmware exits.
 
-To simulate the UART, we use the LowRISC OpenTitan [UART DPI](https://github.com/lowRISC/opentitan/tree/master/hw/dv/dpi/uartdpi).
-Read how to interact with it in the Section "Running Software on a Verilator Simulation with Bazel" [here](https://opentitan.org/guides/getting_started/setup_verilator.html#running-software-on-a-verilator-simulation-with-bazel).
-The output of the UART DPI module is printed in the `uart0.log` file in the simulation folder. The content of this file is automatically printed on the console once the simulation successfully completes.
+- `+drain_cycles=<n>`: clock cycles simulated after the firmware exits, before the final checks (default 100).
+
+- `+waves`: dumps `waveform.fst` (Verilator) or `waveform.vcd`.
+
+- `+verbose`: more logging from the testbench and the drivers.
+
+## UART
+
+The UART driver (`tb/vdrivers/vdrv_uart.sv`) writes what the firmware prints to `uart0.log` in the simulation folder; its content is printed on the console once the simulation completes.
+`+uart_echo` also prints every line to the simulator log, `+uart_expect=<text>` fails the test if `<text>` is never printed, and `+uart_send=<text>` sends `<text>` to the firmware once it is booted.

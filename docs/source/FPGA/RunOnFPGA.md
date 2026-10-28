@@ -131,8 +131,7 @@ The VPK180 target is not supported by the PYNQ project. However, you can use the
 
 ## Running firmware on the FPGA
 
-To run SW, follow the [Debug](./../How_to/Debug.md) guide to load the binaries with the HS2 cable over JTAG,
-or follow the [ExecuteFromFlash](./../How_to/ExecuteFromFlash.md) guide if you have a FLASH attached to the FPGA.
+To run SW, follow the [ExecuteFromFlash](./../How_to/ExecuteFromFlash.md) guide to program a FLASH attached to the FPGA.
 
 Do not forget that the `pynq-z2` board requires you to have the ethernet cable attached to the board while running.
 
@@ -147,13 +146,13 @@ To get X-HEEP running on the FPGA, you need to program the FPGA with the bitstre
 
 On Xilinx FPGAs, the JTAG, UART, and SPI interfaces of X-HEEP are exposed on PMODs. Once that you have identified the pinout of the PMODS you can connect to them your preferred JTAG connector, UART to USB converter, and SPI flash programmer.
 
-To run the software application on the FPGA, you can use the HS2 cable to load the binaries over JTAG, or you can use the SPI flash programmer to program the flash and set the boot switches on the FPGA correctly.
+To run the software application on the FPGA, use the SPI flash programmer to program the flash and set the boot switches on the FPGA correctly.
 
 Both the JTAG, UART and SPI interfaces are mapped to be compliant with the [ESL iceprog compatible programmer](https://github.com/esl-epfl/x-heep-programmer-pmod).
 
-To interface with the jtag one can use [openocd](http://openocd.org/), to interface with the UART one can use [picocom](https://linux.die.net/man/8/picocom), and to interface with the SPI flash one can use iceprog (from the [icestorm](http://www.clifford.at/icestorm/) project) already shipped and built in X-HEEP main repo.
+To interface with the UART one can use [picocom](https://linux.die.net/man/8/picocom), and to interface with the SPI flash one can use iceprog (from the [icestorm](http://www.clifford.at/icestorm/) project) already shipped and built in X-HEEP main repo.
 
-Check the [Debug](./../How_to/Debug.md) and [ExecuteFromFlash](./../How_to/ExecuteFromFlash.md) guides for more details.
+Check the [ExecuteFromFlash](./../How_to/ExecuteFromFlash.md) guide for more details.
 
 ## FPGA Utilizations
 

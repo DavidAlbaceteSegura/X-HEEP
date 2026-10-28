@@ -33,9 +33,23 @@ COMPILER_PREFIXES = ["riscv32-unknown-" for _ in COMPILERS]
 SIMULATORS = ["verilator"]
 
 # Pattern to look for when simulating an app to see if the app finished
-# correctly or not
+# correctly or not. The testbench result code is 0 when the firmware exited
+# with 0 and no driver reported errors (see tb/tb_top.sv).
 ERROR_PATTERN_DICT = {
-    "verilator": r"Program Finished with value (\d+)",
+    "verilator": r"\[TB\] RESULT: \w+ code=(\d+)",
+}
+
+# Extra make variables for the apps that need testbench drivers connected to
+# their pads (see tb/vinterconnect.sv)
+APP_SIM_ARGS = {
+    "example_gpio_intr": ["TB_ROUTE=gpio"],
+    "example_ext_peripheral_intr": ["TB_ROUTE=gpio"],
+    "example_i2s": ["TB_ROUTE=i2s"],
+    "example_pdm2pcm": ["TB_ROUTE=pdm2pcm"],
+    "example_spi_slave": ["TB_ROUTE=spi_slave"],
+    "demo_spi_master_slave": ["TB_ROUTE=spi_slave"],
+    "demo_i2c_tmp112": ["TB_ROUTE=i2c"],
+    "demo_i2c_lms6dso": ["TB_ROUTE=i2c"],
 }
 
 # Timeout for the simulation in seconds
@@ -53,7 +67,6 @@ BLACKLIST = [
     "example_dma_subaddressing",
     "example_pdm2pcm",
     "example_dma_slow_mem",  # TODO: @tommaso remove this once it's fixed
-    "example_matmul_quadrilatero",
     "example_serial_link_performance",
     "example_serial_link_simulation_dma",  # Functionality already covered by example_serial_link_direct_write, excluded to avoid redundant testing
     "example_serial_link",  # Functionality already covered by example_serial_link_direct_write, excluded to avoid redundant testing
@@ -236,7 +249,11 @@ def main():
                             )
                     else:
                         simulation_result = simulator.run_app(
-                            an_app, SIM_TIMEOUT_S, args.dry_run, verbose=not args.table
+                            an_app,
+                            SIM_TIMEOUT_S,
+                            args.dry_run,
+                            verbose=not args.table,
+                            make_args=APP_SIM_ARGS.get(an_app.name, []),
                         )
                         an_app.add_simulation_result(simulator.name, simulation_result)
 

@@ -7,4 +7,3 @@ This section documents the testing and verification systems available in X-HEEP.
    :maxdepth: 2
 
    Testing
-   VerifHEEP

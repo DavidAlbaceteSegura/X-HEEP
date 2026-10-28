@@ -5,8 +5,6 @@
 `verilator_config
 
 lint_off -rule UNUSED -file "*tb/testharness.sv" -match "*"
-lint_off -rule UNUSED -file "*tb/ext_xbar.sv" -match "Signal is not driven, nor used: '*"
-lint_off -rule UNOPTFLAT -file "*tb/ext_xbar.sv" -match "Signal unoptimizable: Feedback to clock or circular logic: 'testharness.ext_bus_i.__Vcellout__ext_xbar_i__slave_req_o'"
 lint_off -rule UNDRIVEN -file "*tb/testharness.sv" -match "Signal is not driven: 'jtag_tdo_o'*"
 lint_off -rule UNDRIVEN -file "*tb/testharness.sv" -match "Signal is not driven: 'ext_ao_peripheral_req'*"
 lint_off -rule UNDRIVEN -file "*tb/testharness.sv" -match "Signal is not driven: 'im2col_spc_done_int_o'*"
@@ -25,4 +23,15 @@ lint_off -rule BLKSEQ -file "*tb/yosys_spiflash.sv" -match "*"
 lint_off -rule SYNCASYNCNET -file "*tb/yosys_spiflash.sv" -match "*"
 lint_off -rule DECLFILENAME -file "*tb/yosys_spiflash.sv" -match "*"
 lint_off -rule WIDTHCONCAT -file "*tb/testharness.sv" -match "*"
-lint_off -rule UNOPTFLAT -file "*tb/ext_xbar.sv" -match "Signal unoptimizable: Circular combinational logic: 'testharness.ext_bus_i.ext_xbar_i.slave_resp_rvalid'"
+// vinterconnect resolves the pads combinationally, loopback routes read pads they drive
+lint_off -rule UNOPTFLAT -file "*tb/vinterconnect.sv" -match "*"
+// Driver tasks only use part of the JTAG shift registers
+lint_off -rule UNUSEDSIGNAL -file "*tb/vdrivers/vdrv_jtag.sv" -match "Bits of signal are not used: 'dout'*"
+lint_off -rule UNUSEDSIGNAL -file "*tb/vdrivers/vdrv_jtag.sv" -match "Signal is not used: 'status'*"
+// Behavioral drivers use blocking assignments in edge-triggered processes
+lint_off -rule BLKSEQ -file "*tb/vdrivers/*" -match "*"
+lint_off -rule SYNCASYNCNET -file "*tb/tb_top.sv" -match "*"
+// Same false-positive ready/valid loop as the meta_sel_d waiver in hw/vendor/waiver/lint/axi.vlt,
+// seen in the serial link's axi_to_mem when the testbench is the top level
+lint_off -rule UNOPTFLAT -file "*/pulp_platform/common_cells/src/stream_fifo.sv" -match "Signal unoptimizable: Circular combinational logic: '*serial_link_xheep_wrapper_i.i_axi_to_mem.*'"
+lint_off -rule UNOPTFLAT -file "*/pulp_platform/common_cells/src/stream_fork_dynamic.sv" -match "Signal unoptimizable: Circular combinational logic: '*serial_link_xheep_wrapper_i.i_axi_to_mem.*'"
