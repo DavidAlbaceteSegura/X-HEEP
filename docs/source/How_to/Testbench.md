@@ -76,7 +76,7 @@ make verilator-run TB_ROUTE=i2c,gpio
 
 Many of these pads are shared with GPIOs. If two routes need the same pad, the test stops with a configuration error. `gpio` only takes the GPIO pads the other routes left free, so it can be combined with anything.
 
-If your app uses a pad, it needs its route. Without it the firmware usually waits forever and the test ends in a timeout. `make test` already passes the right route to the apps that need one (`APP_SIM_ARGS` in `test/test_apps/test_apps.py`). Add your app there if it needs a route.
+If your app uses a pad, it needs its route. Without it the firmware usually waits forever and the test ends in a timeout. In a regression file, set it with `sim: { tb_route: "..." }` (see `ci/README.md`).
 
 ## Configure a driver
 

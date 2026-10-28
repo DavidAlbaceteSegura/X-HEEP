@@ -103,10 +103,6 @@ override SIM_ARGS += $(if $(MAX_SIM_TIME),+max_sim_time=$(MAX_SIM_TIME))
 override SIM_ARGS += $(if $(BOOT),+boot=$(BOOT))
 override SIM_ARGS += $(if $(TB_ROUTE),+tb_route=$(TB_ROUTE))
 
-# Testing flags
-# Optional TEST_FLAGS options are '--compile-only'
-TEST_FLAGS=
-
 # Flash read address for testing, in hexadecimal format 0x0000
 FLASHREAD_ADDR ?= 0x0
 FLASHREAD_FILE ?= $(mkfile_path)/flashcontent.hex
@@ -188,7 +184,7 @@ format-python:
 	$(PYTHON) -m black util/waiver-gen.py
 	$(PYTHON) -m black util/c_gen.py
 	$(PYTHON) -m black test/test_x_heep_gen
-	$(PYTHON) -m black test/test_apps
+	$(PYTHON) -m black ci
 	$(PYTHON) -m black configs
 
 ## @section APP FW Build
@@ -356,14 +352,6 @@ flash-erase:
 	./iceprog -d i:0x0403:0x6011 -I B -b;
 
 ## @section Testing
-
-## Run the tests for X-HEEP. Cleans and rebuilds all the project.
-.PHONY: test
-test:
-	$(MAKE) mcu-gen X_HEEP_CFG=configs/ci.hjson
-	$(RM) test/*.log
-	$(PYTHON) test/test_apps/test_apps.py $(TEST_FLAGS) 2>&1 | tee test/test_apps/test_apps.log
-	@echo "You can also find the output in test/test_apps/test_apps.log"
 
 ## Compares two mcu-gen runs and lists the differences in the generated files. 
 ## It can be used to manually check if a change in the configuration or in the mcu-gen code has an

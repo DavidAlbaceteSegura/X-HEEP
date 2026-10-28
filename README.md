@@ -5,7 +5,6 @@
 
 [![Documentation](https://readthedocs.org/projects/x-heep/badge/?version=latest)](https://x-heep.readthedocs.io/en/latest/)
 [![License](https://img.shields.io/badge/License-Apache%202.0%20with%20SHL--2.1-blue.svg)](LICENSE)
-[![CI](https://github.com/x-heep/x-heep/actions/workflows/ci.yml/badge.svg)](https://github.com/x-heep/x-heep/actions/workflows/ci.yml)
 [![Chat](https://img.shields.io/badge/Matrix-%23x--heep:matrix.org-brightgreen)](https://matrix.to/#/#x-heep:matrix.org)
 
 **X-HEEP** (eXtensible Heterogeneous Energy-Efficient Platform) is an open-source, configurable, and extensible **RISC-V microcontroller** described in SystemVerilog.
@@ -63,7 +62,7 @@ Full documentation is available on [Read the Docs](https://x-heep.readthedocs.io
 | [FPGA](https://x-heep.readthedocs.io/en/latest/FPGA/index.html) | Running on FPGA boards, bitstream generation, debugging with ILA |
 | [ASIC](https://x-heep.readthedocs.io/en/latest/ASIC/index.html) | ASIC implementations (HEEPocrates, HEEPnosis, X-TRELA, and more) |
 | [Extending](https://x-heep.readthedocs.io/en/latest/Extending/index.html) | Adding custom hardware accelerators and software |
-| [Testing](https://x-heep.readthedocs.io/en/latest/Testing/index.html) | CI workflows and the application test suite |
+| [Testing](https://x-heep.readthedocs.io/en/latest/Testing/index.html) | Regression flow (`ci/run_flow.py`) and CI integration |
 
 ---
 

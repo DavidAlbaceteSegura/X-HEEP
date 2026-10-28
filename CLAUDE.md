@@ -19,7 +19,8 @@ software is built with Make + CMake using a RISC-V cross-compiler.
 - `hw/` — RTL: `core-v-mini-mcu/` (SoC top), `ip/`, `ip_examples/`, `fpga/`, `asic/`, `simulation/`, `system/` (SoC + pad ring), `vendor/` (vendored third-party IPs).
 - `sw/` — Software: applications, drivers, SDK, linker scripts.
 - `tb/` — Testbench (`tb_top.sv`, `testharness.sv`) and C++ simulation driver (`tb_top.cpp`).
-- `test/` — Test scripts: `test_apps/` (app compile+sim suite), `test_x_heep_gen/`.
+- `ci/` — Regression flow: `run_flow.py` runs the hjson regressions in `ci/regressions/`.
+- `test/` — `test_x_heep_gen/` (mcu-gen comparison).
 - `util/` — Python tooling: `xheep_gen/` (the generator, vendored), `vendor.py`, `c_gen.py`, Docker, profiling.
 - `scripts/` — Build/simulation helper scripts.
 - `docs/` — Sphinx documentation (`docs/source/`).
@@ -57,8 +58,7 @@ make mcu-gen                 # generate RTL from config; run after any .tpl/conf
 make app PROJECT=hello_world # compile an app (RISC-V cross-compile via CMake)
 make verilator-build         # build the Verilator model (once, or after RTL changes)
 make verilator-run           # run sw/build/main.hex on the Verilator model
-make test                    # synthesize verilator, compile+simulate all apps
-make test TEST_FLAGS=--compile-only  # fast: compile all apps only
+python ci/run_flow.py ci/regressions/smoke.hjson  # regression: mcu-gen, build, compile+simulate the tests
 make compare-mcu-gen         # diff mcu-gen output vs main for testing config/generator changes
 make verible                 # format SystemVerilog
 make format-python           # format Python (black)
@@ -111,7 +111,7 @@ file pinning the upstream URL and commit.
   (bus, peripheral/DMA ports, interrupts, CV-X-IF) are tied off; the exit value is read by
   `tb_top` through the hierarchy, and the power-switch acks are looped back with a delay.
 - Pass/fail is the `[TB] RESULT: ... code=<n>` line. Apps that need pads get their route via
-  `APP_SIM_ARGS` in `test/test_apps/test_apps.py`.
+  `sim.tb_route` in the regression hjson (`ci/regressions/`).
 - Verilator cannot mix pullup and pulldown on one vector, so pads are split into the `pad_pu`
   and `pad_pd` nets; keep the pull classification in `tb_pads_pkg.sv.tpl` and
   `testharness.sv.tpl` in sync.
