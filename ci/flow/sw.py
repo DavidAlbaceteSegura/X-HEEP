@@ -16,7 +16,10 @@ _OUTPUTS = ("main.elf", "main.hex", "main.map")
 
 
 def define_flags(cfg: SwCfg) -> List[str]:
-    return [f"-D{name}" if val is None else f"-D{name}={val}" for name, val in define_items(cfg.defines)]
+    return [
+        f"-D{name}" if val is None else f"-D{name}={val}"
+        for name, val in define_items(cfg.defines)
+    ]
 
 
 def compile_app(

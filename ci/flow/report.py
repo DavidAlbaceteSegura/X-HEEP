@@ -60,7 +60,9 @@ def write_json(results: List[TestResult], build_info: dict, path: Path) -> None:
 
 
 def write_junit(results: List[TestResult], build_info: dict, path: Path) -> None:
-    failures = sum(not r.status.passed and r.status is not Status.NOT_RUN for r in results)
+    failures = sum(
+        not r.status.passed and r.status is not Status.NOT_RUN for r in results
+    )
     skipped = sum(r.status is Status.NOT_RUN for r in results)
     suite = ET.Element(
         "testsuite",
@@ -85,8 +87,12 @@ def write_junit(results: List[TestResult], build_info: dict, path: Path) -> None
         if r.status is Status.NOT_RUN:
             ET.SubElement(case, "skipped", message=r.message)
         elif not r.status.passed:
-            fail = ET.SubElement(case, "failure", message=f"{r.status.value}: {r.message}",
-                                 type=r.status.value)
+            fail = ET.SubElement(
+                case,
+                "failure",
+                message=f"{r.status.value}: {r.message}",
+                type=r.status.value,
+            )
             fail.text = r.log_tail
         if r.out_dir:
             ET.SubElement(case, "system-out").text = f"artifacts: {r.out_dir}"

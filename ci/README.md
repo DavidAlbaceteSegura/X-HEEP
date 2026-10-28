@@ -58,6 +58,43 @@ build/   mcugen.log  setup.log  build.log  build_info.json
 <test>/  app.log  main.elf  main.hex  main.map  sim.log  uart0.log  result.json  [waveform.*]
 ```
 
+## Split flow (CI)
+
+The build, the test selection and the tests can run in separate jobs:
+
+```bash
+# 1. Build: mcu-gen + elaboration, packs the model in <out>/build/sim-build.tar.gz
+python ci/run_flow.py ci/regressions/smoke.hjson --build-only
+# 2. Plan: selected tests with their resolved parameters, plus the CI matrix
+python ci/run_flow.py ci/regressions/smoke.hjson --tags smoke --plan plan.json
+# 3. Test (one job per test): runs the planned test on the restored model
+python ci/run_flow.py --from-plan plan.json --test hello_jtag --use-build sim-build.tar.gz
+```
+
+A test job runs mcu-gen (the sw compilation needs its generated headers) but
+does not elaborate. It refuses a bundle built for another configuration,
+simulator or set of defines, and warns if it was built at another commit.
+
+### Azure Pipelines
+
+`ci/azure/regression.yml` implements the split flow in three stages:
+
+| Stage | Job(s) | Keeps |
+|---|---|---|
+| mcu-gen & elaboration | `build` | artifact `sim-build` (elaborated model), `build-logs` |
+| test planning | `plan` (runs in parallel with the build) | artifact `test-plan` (`plan.json`) |
+| test run | `load_plan`, then one `test` job per planned test, in parallel | `test-<name>` artifacts, one test result per job |
+
+The matrix of the test jobs comes from `load_plan`, in the same stage, which
+reads the kept plan: Azure only builds a matrix from a job of the same stage.
+The pipeline takes the regression file, tags, excluded tags, agent pool and
+maximum parallel jobs as run parameters. The agents need the RISC-V toolchain
+(`RISCV_XHEEP`) and the simulator; `ci/azure/setup.yml` checks out the
+repository and creates the Python environment.
+
+Not tested on Azure yet. Re-running a single failed test job can fail on
+publishing an artifact that already exists for that run.
+
 ## Simulators
 
 Backends live in `ci/flow/simulators/`, one module per simulator, registered in

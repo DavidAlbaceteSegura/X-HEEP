@@ -5,9 +5,14 @@
 """Runs a regression: mcu-gen and elaboration once, then sw compile and
 simulation of every selected test.
 
+The build can also be split from the tests (e.g. across CI jobs):
+build_only() elaborates and packs the model into build/sim-build.tar.gz, and
+a Runner created with use_build=<bundle> restores it instead of elaborating
+(mcu-gen still runs, the sw compilation needs its generated headers).
+
 Output layout (out_dir):
     run.log  summary.json  junit.xml
-    build/   mcugen.log setup.log build.log build_info.json
+    build/   mcugen.log setup.log build.log build_info.json [sim-build.tar.gz]
     <test>/  app.log main.elf main.hex sim.log uart0.log [waveform.*] result.json
 """
 
@@ -20,7 +25,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from . import log, proc, report, sw
+from . import bundle, log, proc, report, sw
 from .config import FlowCfg, TestCfg
 from .results import Status, TestResult, classify_simulation
 from .simulators import create as create_simulator
@@ -40,6 +45,7 @@ class Runner:
         out_dir: Path,
         waves: bool = False,
         skip_build: bool = False,
+        use_build: Optional[Path] = None,
     ):
         self.cfg = cfg
         self.tests = tests
@@ -47,14 +53,38 @@ class Runner:
         self.out_dir = out_dir
         self.waves = waves
         self.skip_build = skip_build
+        self.use_build = use_build
+        self.restored_info: Optional[dict] = None
         self.sim = create_simulator(repo, cfg.build.simulator)
+        self.build_dir = out_dir / "build"
 
     # ---------------------------------------------------------------------
+    def build_only(self) -> bool:
+        """mcu-gen + elaboration, then packs the model for other jobs."""
+        build_info = self._build_info()
+        build_ok, _ = self._build()
+        build_info["build_ok"] = build_ok
+        if build_ok:
+            bundle.pack(
+                self.repo,
+                self.sim.bundle_paths(),
+                build_info,
+                self.build_dir / "sim-build.tar.gz",
+            )
+        (self.build_dir / "build_info.json").write_text(
+            json.dumps(build_info, indent=2)
+        )
+        return build_ok
+
     def run(self) -> List[TestResult]:
         build_info = self._build_info()
         build_ok, build_msg = self._build()
         build_info["build_ok"] = build_ok
-        (self.out_dir / "build" / "build_info.json").write_text(json.dumps(build_info, indent=2))
+        if self.use_build and build_ok:
+            build_info["restored_from"] = self.restored_info
+        (self.build_dir / "build_info.json").write_text(
+            json.dumps(build_info, indent=2)
+        )
 
         results = []
         for i, test in enumerate(self.tests, 1):
@@ -67,34 +97,79 @@ class Runner:
         report.console(results, build_info)
         report.write_json(results, build_info, self.out_dir / "summary.json")
         report.write_junit(results, build_info, self.out_dir / "junit.xml")
-        _log.info("reports: %s, %s", self.out_dir / "summary.json", self.out_dir / "junit.xml")
+        _log.info(
+            "reports: %s, %s", self.out_dir / "summary.json", self.out_dir / "junit.xml"
+        )
         return results
 
     # ---------------------------------------------------------------------
     # Build: mcu-gen + elaboration
     # ---------------------------------------------------------------------
     def _build(self) -> Tuple[bool, str]:
-        build_dir = self.out_dir / "build"
-        build_dir.mkdir(parents=True, exist_ok=True)
+        self.build_dir.mkdir(parents=True, exist_ok=True)
         b = self.cfg.build
 
         if self.skip_build:
-            _log.warning("skipping mcu-gen and elaboration, reusing the existing %s build", self.sim.name)
+            _log.warning(
+                "skipping mcu-gen and elaboration, reusing the existing %s build",
+                self.sim.name,
+            )
             return True, ""
 
         _log.info("mcu-gen: %s, %s", b.x_heep_cfg, b.pads_cfg)
         gen = proc.run(
             ["make", "mcu-gen", f"X_HEEP_CFG={b.x_heep_cfg}", f"PADS_CFG={b.pads_cfg}"],
-            build_dir / "mcugen.log", self.repo, BUILD_TIMEOUT_S,
+            self.build_dir / "mcugen.log",
+            self.repo,
+            BUILD_TIMEOUT_S,
         )
         if not gen.ok:
             return self._build_failed("mcu-gen", gen)
 
+        if self.use_build:
+            return self._restore()
+
         _log.info("elaboration with %s (this can take several minutes)", self.sim.name)
-        build = self.sim.build(b.defines, build_dir, BUILD_TIMEOUT_S, self._build_env())
+        build = self.sim.build(
+            b.defines, self.build_dir, BUILD_TIMEOUT_S, self._build_env()
+        )
         if not build.ok:
             return self._build_failed("elaboration", build)
         _log.info("build done in %.0f s", gen.duration_s + build.duration_s)
+        return True, ""
+
+    def _restore(self) -> Tuple[bool, str]:
+        """Uses the model elaborated by another job instead of elaborating."""
+        try:
+            info = bundle.unpack(self.use_build, self.repo)
+        except (OSError, KeyError, ValueError) as exc:
+            _log.error("cannot restore the build from %s: %s", self.use_build, exc)
+            return False, f"cannot restore the build from {self.use_build}: {exc}"
+        self.restored_info = info
+        # The bundle must match the hardware this run expects
+        b = self.cfg.build
+        expected = {
+            "simulator": b.simulator.name,
+            "x_heep_cfg": b.x_heep_cfg,
+            "pads_cfg": b.pads_cfg,
+            "defines": b.defines,
+        }
+        mismatch = {
+            k: (info.get(k), v) for k, v in expected.items() if info.get(k) != v
+        }
+        if mismatch:
+            msg = f"the build bundle does not match the regression: {mismatch}"
+            _log.error(msg)
+            return False, msg
+        if not info.get("build_ok"):
+            return False, "the build bundle comes from a failed build"
+        commit = git_commit(self.repo)
+        if info.get("git_commit") != commit:
+            _log.warning(
+                "build bundle made at commit %s, running at %s",
+                info.get("git_commit"),
+                commit,
+            )
         return True, ""
 
     def _build_env(self) -> dict:
@@ -104,7 +179,9 @@ class Runner:
 
     def _build_failed(self, step: str, result: proc.ProcResult) -> Tuple[bool, str]:
         reason = "timed out" if result.timed_out else f"exit code {result.returncode}"
-        _log.error("%s failed (%s), see %s\n%s", step, reason, result.log_file, result.tail(15))
+        _log.error(
+            "%s failed (%s), see %s\n%s", step, reason, result.log_file, result.tail(15)
+        )
         return False, f"{step} failed ({reason}), see {result.log_file}"
 
     # ---------------------------------------------------------------------
@@ -178,7 +255,7 @@ class Runner:
             "defines": b.defines,
             "build_args": b.simulator.build_args,
             "run_args": b.simulator.run_args,
-            "git_commit": _git_commit(self.repo),
+            "git_commit": git_commit(self.repo),
             "host": platform.node(),
             "date": datetime.datetime.now().isoformat(timespec="seconds"),
             "build_reused": self.skip_build,
@@ -195,12 +272,21 @@ def _detect_compiler_prefix() -> Optional[str]:
     return gccs[0].name[: -len("elf-gcc")] if gccs else None
 
 
-def _git_commit(repo: Path) -> Optional[str]:
+def git_commit(repo: Path) -> Optional[str]:
     try:
-        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo,
-                             capture_output=True, text=True, check=True).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
-                               cwd=repo, capture_output=True, text=True).stdout.strip()
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
         return f"{sha}{'-dirty' if dirty else ''}"
     except (OSError, subprocess.CalledProcessError):
         return None

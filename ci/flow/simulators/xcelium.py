@@ -31,15 +31,28 @@ class Xcelium(Simulator):
     def define_flag(self, name: str, value: Optional[object]) -> List[str]:
         return ["-define", name if value is None else f"{name}={value}"]
 
-    def _elaborate(self, extra_args: List[str], log_file: Path, timeout_s: float) -> proc.ProcResult:
+    def _elaborate(
+        self, extra_args: List[str], log_file: Path, timeout_s: float
+    ) -> proc.ProcResult:
         self._append_make_var(
-            self.work_dir / "Makefile", "XRUN_OPTIONS", [*extra_args, f"$({self._STEP_VAR})"]
+            self.work_dir / "Makefile",
+            "XRUN_OPTIONS",
+            [*extra_args, f"$({self._STEP_VAR})"],
         )
         return proc.run(
-            ["make", "run", f"{self._STEP_VAR}=-elaborate"], log_file, self.work_dir, timeout_s
+            ["make", "run", f"{self._STEP_VAR}=-elaborate"],
+            log_file,
+            self.work_dir,
+            timeout_s,
         )
 
-    def run(self, plusargs: Sequence[str], log_file: Path, timeout_s: float) -> proc.ProcResult:
+    def bundle_paths(self) -> List[Path]:
+        # The snapshot (xcelium.d), the generated Makefile and file lists
+        return [self.work_dir]
+
+    def run(
+        self, plusargs: Sequence[str], log_file: Path, timeout_s: float
+    ) -> proc.ProcResult:
         # The edalize Makefile adds the '+' itself; values must not contain spaces
         plusargs_var = " ".join(p.lstrip("+") for p in plusargs)
         step = " ".join(["-R", *(shlex.quote(a) for a in self.cfg.run_args)])

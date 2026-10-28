@@ -178,7 +178,9 @@ def _parse_test(raw: Dict[str, Any], where: str) -> TestCfg:
     if sim.boot not in _BOOT_MODES:
         raise ConfigError(f"{where}.sim: boot must be one of {sorted(_BOOT_MODES)}")
     if sim.boot == "flash" and sw.linker == "on_chip":
-        raise ConfigError(f"{where}: boot 'flash' needs linker flash_load or flash_exec")
+        raise ConfigError(
+            f"{where}: boot 'flash' needs linker flash_load or flash_exec"
+        )
 
     return TestCfg(
         name=str(raw["name"]),
@@ -222,7 +224,9 @@ def load(path: Path) -> FlowCfg:
     _check_keys("defaults", defaults, "defaults")
     tests = []
     for i, raw in enumerate(data.get("tests", [])):
-        where = f"tests[{i}]" + (f" ({raw['name']})" if isinstance(raw, dict) and "name" in raw else "")
+        where = f"tests[{i}]" + (
+            f" ({raw['name']})" if isinstance(raw, dict) and "name" in raw else ""
+        )
         _check_keys("test", raw, where)
         tests.append(_parse_test(_merge(defaults, raw), where))
 

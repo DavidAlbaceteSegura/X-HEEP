@@ -1,0 +1,13 @@
+# Copyright 2026 OpenHW Group
+# Solderpad Hardware License, Version 2.1, see LICENSE.md for details.
+# SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+#
+# Steps shared by every job: checkout and Python environment.
+# The agent must provide the RISC-V toolchain ($RISCV_XHEEP) and the simulator.
+
+steps:
+- checkout: self
+  fetchDepth: 1
+
+- script: make venv REQUIREMENTS_TXT=util/python-requirements.txt
+  displayName: Python environment

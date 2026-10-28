@@ -19,11 +19,21 @@ class Verilator(Simulator):
     def define_flag(self, name: str, value: Optional[object]) -> List[str]:
         return [f"+define+{name}" if value is None else f"+define+{name}={value}"]
 
-    def _elaborate(self, extra_args: List[str], log_file: Path, timeout_s: float) -> proc.ProcResult:
+    def _elaborate(
+        self, extra_args: List[str], log_file: Path, timeout_s: float
+    ) -> proc.ProcResult:
         # Edalize puts the verilator options in config.mk
-        self._append_make_var(self.work_dir / "config.mk", "VERILATOR_OPTIONS", extra_args)
+        self._append_make_var(
+            self.work_dir / "config.mk", "VERILATOR_OPTIONS", extra_args
+        )
         return proc.run(["make", "binary"], log_file, self.work_dir, timeout_s)
 
-    def run(self, plusargs: Sequence[str], log_file: Path, timeout_s: float) -> proc.ProcResult:
+    def bundle_paths(self) -> List[Path]:
+        # --binary produces a self-contained executable
+        return [self.work_dir / "Vtb_top"]
+
+    def run(
+        self, plusargs: Sequence[str], log_file: Path, timeout_s: float
+    ) -> proc.ProcResult:
         cmd = ["./Vtb_top", *plusargs, *self.cfg.run_args]
         return proc.run(cmd, log_file, self.work_dir, timeout_s)

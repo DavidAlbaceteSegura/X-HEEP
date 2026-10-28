@@ -80,7 +80,11 @@ class TestResult:
 def classify_simulation(proc: ProcResult) -> Tuple[Status, str, Optional[str]]:
     """Turns a finished simulation into (status, message, sw_exit)."""
     if proc.timed_out:
-        return Status.HANG, f"killed after {proc.duration_s:.0f} s by the flow timeout", None
+        return (
+            Status.HANG,
+            f"killed after {proc.duration_s:.0f} s by the flow timeout",
+            None,
+        )
 
     try:
         text = proc.log_file.read_text(errors="replace")
@@ -102,7 +106,11 @@ def classify_simulation(proc: ProcResult) -> Tuple[Status, str, Optional[str]]:
 
     # The testbench result and the process status must agree
     if status.passed and proc.returncode != 0:
-        return Status.ERROR, f"result PASS but simulator exit code {proc.returncode}", sw_exit
+        return (
+            Status.ERROR,
+            f"result PASS but simulator exit code {proc.returncode}",
+            sw_exit,
+        )
 
     if status.passed:
         return status, "", sw_exit

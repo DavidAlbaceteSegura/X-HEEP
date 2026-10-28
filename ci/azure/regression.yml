@@ -1,0 +1,150 @@
+# Copyright 2026 OpenHW Group
+# Solderpad Hardware License, Version 2.1, see LICENSE.md for details.
+# SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+#
+# X-HEEP regression on Azure Pipelines, in three stages:
+#
+#   Build  mcu-gen + elaboration, once         -> artifact sim-build (elaborated model)
+#   Plan   select the tests, write the plan     -> artifact test-plan (plan.json)
+#   Test   one parallel job per planned test    <- both artifacts
+#
+# Build and Plan run in parallel. Every Test job restores the elaborated model
+# instead of rebuilding it and runs exactly what the plan says. Each job
+# publishes its junit.xml, so the run's Tests tab lists every test.
+#
+# Create the pipeline in Azure DevOps from this file (ci/azure/regression.yml).
+
+trigger:
+  branches:
+    include: [main]
+
+parameters:
+- name: regression
+  displayName: Regression file
+  type: string
+  default: ci/regressions/smoke.hjson
+- name: tags
+  displayName: Tags (a,b = a or b, a+b = a and b; empty = all)
+  type: string
+  default: ' '
+- name: excludeTags
+  displayName: Exclude tags
+  type: string
+  default: ' '
+- name: pool
+  displayName: Agent pool (needs the RISC-V toolchain and the simulator)
+  type: string
+  default: xheep-linux
+- name: maxParallel
+  displayName: Maximum parallel test jobs
+  type: number
+  default: 8
+
+variables:
+  OUT: $(Build.SourcesDirectory)/build/flow/ci
+
+pool:
+  name: ${{ parameters.pool }}
+
+stages:
+
+# -----------------------------------------------------------------------------
+- stage: Build
+  displayName: mcu-gen & elaboration
+  dependsOn: []
+  jobs:
+  - job: build
+    displayName: mcu-gen & elaboration
+    timeoutInMinutes: 120
+    steps:
+    - template: setup.yml
+    - script: |
+        . .venv/bin/activate
+        python ci/run_flow.py ${{ parameters.regression }} --build-only --out $(OUT)
+      displayName: mcu-gen and elaboration
+    - publish: $(OUT)/build/sim-build.tar.gz
+      artifact: sim-build
+      displayName: Keep the elaborated model
+    - publish: $(OUT)
+      artifact: build-logs
+      displayName: Build logs
+      condition: always()
+
+# -----------------------------------------------------------------------------
+- stage: Plan
+  displayName: test planning
+  dependsOn: []
+  jobs:
+  - job: plan
+    displayName: test planning
+    timeoutInMinutes: 10
+    steps:
+    - template: setup.yml
+    - script: |
+        . .venv/bin/activate
+        set -- ${{ parameters.regression }} --plan $(Build.ArtifactStagingDirectory)/plan.json
+        [ -n "$(echo '${{ parameters.tags }}' | xargs)" ] && set -- "$@" --tags '${{ parameters.tags }}'
+        [ -n "$(echo '${{ parameters.excludeTags }}' | xargs)" ] && set -- "$@" --exclude-tags '${{ parameters.excludeTags }}'
+        python ci/run_flow.py "$@"
+      displayName: Select the tests
+    - publish: $(Build.ArtifactStagingDirectory)/plan.json
+      artifact: test-plan
+      displayName: Keep the test plan
+
+# -----------------------------------------------------------------------------
+- stage: Test
+  displayName: test run
+  dependsOn: [Build, Plan]
+  jobs:
+
+  # Turns the kept plan into the matrix of the test jobs (a matrix can only
+  # come from a job of the same stage)
+  - job: load_plan
+    displayName: load test plan
+    timeoutInMinutes: 5
+    steps:
+    - checkout: none
+    - download: current
+      artifact: test-plan
+    - script: |
+        python3 - <<'EOF'
+        import json
+        plan = json.load(open("$(Pipeline.Workspace)/test-plan/plan.json"))
+        print(f"{len(plan['tests'])} test(s): {', '.join(plan['matrix'])}")
+        print("##vso[task.setvariable variable=matrix;isOutput=true]" + json.dumps(plan["matrix"]))
+        EOF
+      name: plan
+      displayName: Matrix from the plan
+
+  - job: test
+    displayName: test
+    dependsOn: load_plan
+    timeoutInMinutes: 60
+    strategy:
+      matrix: $[ dependencies.load_plan.outputs['plan.matrix'] ]
+      maxParallel: ${{ parameters.maxParallel }}
+    steps:
+    - template: setup.yml
+    - download: current
+      artifact: sim-build
+    - download: current
+      artifact: test-plan
+    - script: |
+        . .venv/bin/activate
+        python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
+          --test $(TEST_NAME) \
+          --use-build $(Pipeline.Workspace)/sim-build/sim-build.tar.gz \
+          --out $(OUT)
+      displayName: Run $(TEST_NAME)
+    - task: PublishTestResults@2
+      displayName: Test result
+      condition: always()
+      inputs:
+        testResultsFormat: JUnit
+        testResultsFiles: $(OUT)/junit.xml
+        testRunTitle: $(TEST_NAME)
+        failTaskOnFailedTests: false
+    - publish: $(OUT)
+      artifact: test-$(TEST_NAME)
+      displayName: Test artifacts
+      condition: always()
