@@ -2,12 +2,20 @@
 # Solderpad Hardware License, Version 2.1, see LICENSE.md for details.
 # SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 #
-# Steps shared by every job: checkout and Python environment.
-# The agent must provide the RISC-V toolchain ($RISCV_XHEEP) and the simulator.
+# Steps shared by every job running in the x-heep-toolchain image: checkout,
+# tools on PATH and Python environment.
 
 steps:
 - checkout: self
   fetchDepth: 1
+  clean: true
+
+# The image sets $RISCV_XHEEP and lists its tool directories in $TOOL_PATH, but
+# only its login shell (env.sh) adds them to PATH
+- script: |
+    for dir in ${TOOL_PATH//:/ }; do echo "##vso[task.prependpath]$dir"; done
+    git config --global --add safe.directory '*'
+  displayName: Tools on PATH
 
 - script: make venv REQUIREMENTS_TXT=util/python-requirements.txt
   displayName: Python environment

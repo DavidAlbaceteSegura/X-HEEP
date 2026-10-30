@@ -94,10 +94,13 @@ was made at another commit.
 
 The matrix of the test jobs comes from `load_plan`, in the same stage, which
 reads the kept plan: Azure only builds a matrix from a job of the same stage.
-The pipeline takes the regression file, tags, excluded tags, agent pool and
-maximum parallel jobs as run parameters. The agents need the RISC-V toolchain
-(`RISCV_XHEEP`) and the simulator; `ci/azure/setup.yml` checks out the
-repository and creates the Python environment.
+The pipeline takes the regression file, tags, excluded tags, container image
+and maximum parallel jobs as run parameters. Jobs run on Microsoft-hosted
+agents (`ubuntu-latest`) inside the x-heep-toolchain image
+(`util/docker/dockerfile`, default `ghcr.io/x-heep/x-heep/x-heep-toolchain:v1.0.6`),
+which holds the RISC-V toolchains, Verilator and Verible;
+`ci/azure/setup.yml` checks out the repository, puts the image's tools on
+`PATH` and creates the Python environment.
 
 Not tested on Azure yet. Re-running a single failed test job can fail on
 publishing an artifact that already exists for that run.

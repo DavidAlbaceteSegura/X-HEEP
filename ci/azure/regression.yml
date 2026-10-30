@@ -15,7 +15,9 @@
 # or the elaborated model it needs. Each test job publishes its junit.xml, so
 # the run's Tests tab lists every test.
 #
-# Create the pipeline in Azure DevOps from this file (ci/azure/regression.yml).
+# The tools come from the x-heep-toolchain image (parameter image), run on
+# Microsoft-hosted agents. Create the pipeline in Azure DevOps from this file
+# (ci/azure/regression.yml).
 
 trigger:
   branches:
@@ -34,10 +36,10 @@ parameters:
   displayName: Exclude tags
   type: string
   default: ' '
-- name: pool
-  displayName: Agent pool (needs the RISC-V toolchain and the simulator)
+- name: image
+  displayName: Container image with the RISC-V toolchains, Verilator and Verible
   type: string
-  default: xheep-linux
+  default: ghcr.io/x-heep/x-heep/x-heep-toolchain:v1.0.6
 - name: maxParallel
   displayName: Maximum parallel test jobs
   type: number
@@ -46,18 +48,20 @@ parameters:
 variables:
   OUT: $(Build.SourcesDirectory)/build/flow/ci
 
-# The pool is set per stage: Azure does not take a template expression in the
-# pipeline-level pool
+# Every job runs on a Microsoft-hosted agent; the jobs that need the tools run
+# inside the image (util/docker/dockerfile)
+pool:
+  vmImage: ubuntu-latest
+
 stages:
 
 # -----------------------------------------------------------------------------
 - stage: McuGen
   displayName: mcu-gen
   dependsOn: []
-  pool:
-    name: ${{ parameters.pool }}
   jobs:
   - job: gen
+    container: ${{ parameters.image }}
     displayName: mcu-gen
     timeoutInMinutes: 30
     steps:
@@ -75,6 +79,7 @@ stages:
       condition: always()
 
   - job: plan
+    container: ${{ parameters.image }}
     displayName: test planning
     timeoutInMinutes: 10
     steps:
@@ -94,10 +99,9 @@ stages:
 - stage: Elaboration
   displayName: elaboration
   dependsOn: [McuGen]
-  pool:
-    name: ${{ parameters.pool }}
   jobs:
   - job: elaborate
+    container: ${{ parameters.image }}
     displayName: elaboration
     timeoutInMinutes: 120
     steps:
@@ -122,8 +126,6 @@ stages:
 - stage: Test
   displayName: test run
   dependsOn: [McuGen, Elaboration]
-  pool:
-    name: ${{ parameters.pool }}
   jobs:
 
   # Turns the kept plan into the matrix of the test jobs (a matrix can only
@@ -146,6 +148,7 @@ stages:
       displayName: Matrix from the plan
 
   - job: test
+    container: ${{ parameters.image }}
     displayName: test
     dependsOn: load_plan
     timeoutInMinutes: 60
