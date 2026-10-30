@@ -25,10 +25,10 @@ include Makefile.venv
 # FUSESOC and Python values (default)
 ifndef CONDA_DEFAULT_ENV
 $(info USING VENV)
-FUSESOC 	= $(PWD)/$(VENV)/fusesoc
-PYTHON  	= $(PWD)/$(VENV)/python
-RV_PROFILE 	= $(PWD)/$(VENV)/rv_profile
-AREA_PLOT  	= $(PWD)/$(VENV)/area-plot
+FUSESOC 	= $(abspath $(VENV))/fusesoc
+PYTHON  	= $(abspath $(VENV))/python
+RV_PROFILE 	= $(abspath $(VENV))/rv_profile
+AREA_PLOT  	= $(abspath $(VENV))/area-plot
 else
 $(info USING MINICONDA $(CONDA_DEFAULT_ENV))
 FUSESOC 	:= $(shell which fusesoc)
