@@ -54,26 +54,33 @@ Default `build/flow/<regression>/`:
 
 ```
 run.log  summary.json  junit.xml
-build/   mcugen.log  setup.log  build.log  build_info.json
+build/   mcugen.log  setup.log  build.log  build_info.json  [mcu-gen.tar.gz]  [sim-build.tar.gz]
 <test>/  app.log  main.elf  main.hex  main.map  sim.log  uart0.log  result.json  [waveform.*]
 ```
 
 ## Split flow (CI)
 
-The build, the test selection and the tests can run in separate jobs:
+Every step can run in its own job, passing its result on as a bundle:
 
 ```bash
-# 1. Build: mcu-gen + elaboration, packs the model in <out>/build/sim-build.tar.gz
-python ci/run_flow.py ci/regressions/smoke.hjson --build-only
-# 2. Plan: selected tests with their resolved parameters, plus the CI matrix
+# 1. mcu-gen, packs the generated files in <out>/build/mcu-gen.tar.gz
+python ci/run_flow.py ci/regressions/smoke.hjson --gen-only
+# 1'. Plan: selected tests with their resolved parameters, plus the CI matrix
 python ci/run_flow.py ci/regressions/smoke.hjson --tags smoke --plan plan.json
-# 3. Test (one job per test): runs the planned test on the restored model
-python ci/run_flow.py --from-plan plan.json --test hello_jtag --use-build sim-build.tar.gz
+# 2. Elaboration on the generated files, packs the model in <out>/build/sim-build.tar.gz
+python ci/run_flow.py ci/regressions/smoke.hjson --build-only --use-gen mcu-gen.tar.gz
+# 3. One job per test: compile, then simulate in the same output folder
+python ci/run_flow.py --from-plan plan.json --test hello_jtag --compile-only --use-gen mcu-gen.tar.gz
+python ci/run_flow.py --from-plan plan.json --test hello_jtag --sim-only --use-build sim-build.tar.gz
 ```
 
-A test job runs mcu-gen (the sw compilation needs its generated headers) but
-does not elaborate. It refuses a bundle built for another configuration,
-simulator or set of defines, and warns if it was built at another commit.
+`mcu-gen.tar.gz` holds the files mcu-gen wrote in the repository (new,
+ignored or modified files, outside `build/` and `sw/build/`). A compiled test
+that is not simulated yet has the status `COMPILED`; it is left out of
+`junit.xml`, which the simulation writes. A failed compilation is reported in
+`junit.xml` right away. A job refuses a bundle made for another configuration
+(and, for the model, another simulator or set of defines), and warns if it
+was made at another commit.
 
 ### Azure Pipelines
 
@@ -81,9 +88,9 @@ simulator or set of defines, and warns if it was built at another commit.
 
 | Stage | Job(s) | Keeps |
 |---|---|---|
-| mcu-gen & elaboration | `build` | artifact `sim-build` (elaborated model), `build-logs` |
-| test planning | `plan` (runs in parallel with the build) | artifact `test-plan` (`plan.json`) |
-| test run | `load_plan`, then one `test` job per planned test, in parallel | `test-<name>` artifacts, one test result per job |
+| mcu-gen | `gen`, and `plan` in parallel | artifacts `mcu-gen` (generated files), `test-plan` (`plan.json`), `mcu-gen-logs` |
+| elaboration | `elaborate` | artifacts `sim-build` (elaborated model), `elaboration-logs` |
+| test run | `load_plan`, then one `test` job per planned test, in parallel; each compiles its app, then simulates it | `test-<name>` artifacts, one test result per job |
 
 The matrix of the test jobs comes from `load_plan`, in the same stage, which
 reads the kept plan: Azure only builds a matrix from a job of the same stage.

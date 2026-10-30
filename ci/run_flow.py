@@ -11,13 +11,15 @@ All in one:
     python ci/run_flow.py ci/regressions/smoke.hjson --test hello_jtag --waves
     python ci/run_flow.py ci/regressions/smoke.hjson --list
 
-Split across CI jobs (build, plan, one job per test):
-    python ci/run_flow.py ci/regressions/smoke.hjson --build-only
+Split across CI jobs (mcu-gen, elaboration, plan, one job per test):
+    python ci/run_flow.py ci/regressions/smoke.hjson --gen-only
+    python ci/run_flow.py ci/regressions/smoke.hjson --build-only --use-gen mcu-gen.tar.gz
     python ci/run_flow.py ci/regressions/smoke.hjson --tags smoke --plan plan.json
-    python ci/run_flow.py --from-plan plan.json --test hello_jtag --use-build sim-build.tar.gz
+    python ci/run_flow.py --from-plan plan.json --test hello_jtag --compile-only --use-gen mcu-gen.tar.gz
+    python ci/run_flow.py --from-plan plan.json --test hello_jtag --sim-only --use-build sim-build.tar.gz
 
-Exit status: 0 if every selected test passed (or the build/plan succeeded),
-1 if a test or the build failed, 2 on a configuration error.
+Exit status: 0 if every selected test passed (or the step succeeded), 1 if a
+test or the build failed, 2 on a configuration error.
 """
 
 import argparse
@@ -54,6 +56,11 @@ def _parse_args() -> argparse.Namespace:
     )
     split = parser.add_argument_group("split flow (CI)")
     split.add_argument(
+        "--gen-only",
+        action="store_true",
+        help="mcu-gen only, packs the generated files in <out>/build/mcu-gen.tar.gz",
+    )
+    split.add_argument(
         "--build-only",
         action="store_true",
         help="mcu-gen + elaboration only, packs the model in <out>/build/sim-build.tar.gz",
@@ -71,10 +78,26 @@ def _parse_args() -> argparse.Namespace:
         help="take the tests from a plan instead of the hjson",
     )
     split.add_argument(
+        "--use-gen",
+        type=Path,
+        metavar="BUNDLE",
+        help="restore the generated files from a mcu-gen.tar.gz instead of running mcu-gen",
+    )
+    split.add_argument(
         "--use-build",
         type=Path,
         metavar="BUNDLE",
         help="restore the model from a sim-build.tar.gz instead of elaborating",
+    )
+    split.add_argument(
+        "--compile-only",
+        action="store_true",
+        help="compile the tests' sw, leave the simulation to --sim-only",
+    )
+    split.add_argument(
+        "--sim-only",
+        action="store_true",
+        help="simulate the firmware a --compile-only run left in the output folder",
     )
     run = parser.add_argument_group("run")
     run.add_argument(
@@ -99,12 +122,23 @@ def _parse_args() -> argparse.Namespace:
         parser.error(
             "--from-plan only takes --test: the selection was made by the plan"
         )
-    if args.build_only and (args.plan or args.use_build or args.skip_build):
+    steps = ("gen_only", "build_only", "plan", "compile_only", "sim_only")
+    if sum(bool(getattr(args, s)) for s in steps) > 1:
         parser.error(
-            "--build-only cannot be combined with --plan, --use-build or --skip-build"
+            "--gen-only, --build-only, --plan, --compile-only and --sim-only are exclusive"
         )
-    if args.use_build and args.skip_build:
-        parser.error("--use-build and --skip-build are exclusive")
+    if args.gen_only and (args.use_gen or args.use_build or args.skip_build):
+        parser.error(
+            "--gen-only cannot be combined with --use-gen, --use-build or --skip-build"
+        )
+    if args.build_only and (args.use_build or args.skip_build):
+        parser.error("--build-only cannot be combined with --use-build or --skip-build")
+    if args.compile_only and args.use_build:
+        parser.error("--compile-only does not simulate, it takes no --use-build")
+    if args.sim_only and args.use_gen:
+        parser.error("--sim-only does not compile, it takes no --use-gen")
+    if args.skip_build and (args.use_gen or args.use_build):
+        parser.error("--skip-build cannot be combined with --use-gen or --use-build")
     return args
 
 
@@ -122,7 +156,7 @@ def main() -> int:
         print(f"configuration error: {exc}", file=sys.stderr)
         return 2
 
-    if not tests and not args.build_only:
+    if not tests and not (args.gen_only or args.build_only):
         print("no test selected", file=sys.stderr)
         return 2
     if args.list:
@@ -152,12 +186,18 @@ def main() -> int:
             out_dir,
             waves=args.waves,
             skip_build=args.skip_build,
+            use_gen=args.use_gen,
             use_build=args.use_build,
+            compile_sw=not args.sim_only,
+            simulate=not args.compile_only,
         )
     except config.ConfigError as exc:
         logger.error("configuration error: %s", exc)
         return 2
 
+    if args.gen_only:
+        logger.info("regression %s: mcu-gen only, output in %s", cfg.name, out_dir)
+        return 0 if runner.gen_only() else 1
     if args.build_only:
         logger.info(
             "regression %s: build only on %s, output in %s",
@@ -175,7 +215,7 @@ def main() -> int:
         out_dir,
     )
     results = runner.run()
-    return 0 if all(r.status.passed for r in results) else 1
+    return 0 if all(r.status.ok for r in results) else 1
 
 
 if __name__ == "__main__":

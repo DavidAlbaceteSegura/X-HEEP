@@ -23,7 +23,7 @@ def _color(status: Status) -> str:
         return ""
     if status.passed:
         return _GREEN
-    return _YELLOW if status is Status.NOT_RUN else _RED
+    return _YELLOW if status in (Status.NOT_RUN, Status.COMPILED) else _RED
 
 
 def console(results: List[TestResult], build_info: dict) -> None:
@@ -44,8 +44,12 @@ def console(results: List[TestResult], build_info: dict) -> None:
             f"{r.duration_s:>6.1f}s  {r.message}"
         )
     passed = sum(r.status.passed for r in results)
+    compiled = sum(r.status is Status.COMPILED for r in results)
     lines.append("")
-    lines.append(f"{passed}/{len(results)} tests passed")
+    lines.append(
+        f"{passed}/{len(results)} tests passed"
+        + (f", {compiled} compiled and waiting for simulation" if compiled else "")
+    )
     _log.info("\n".join(lines))
 
 

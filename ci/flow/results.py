@@ -34,10 +34,17 @@ class Status(str, enum.Enum):
     HANG = "HANG"  # killed by the flow's wall-clock timeout
     ERROR = "ERROR"  # simulation ended without a valid result line
     NOT_RUN = "NOT_RUN"
+    # sw compiled, simulation left to a later run (split flow)
+    COMPILED = "COMPILED"
 
     @property
     def passed(self) -> bool:
         return self is Status.PASS
+
+    @property
+    def ok(self) -> bool:
+        """Nothing failed so far."""
+        return self in (Status.PASS, Status.COMPILED)
 
 
 # tb_pkg::result_e codes

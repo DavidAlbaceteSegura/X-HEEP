@@ -4,13 +4,16 @@
 #
 # X-HEEP regression on Azure Pipelines, in three stages:
 #
-#   Build  mcu-gen + elaboration, once         -> artifact sim-build (elaborated model)
-#   Plan   select the tests, write the plan     -> artifact test-plan (plan.json)
-#   Test   one parallel job per planned test    <- both artifacts
+#   mcu-gen      mcu-gen, once                -> artifact mcu-gen (generated files)
+#                test planning, in parallel   -> artifact test-plan (plan.json)
+#   elaboration  elaboration, once            <- mcu-gen
+#                                             -> artifact sim-build (elaborated model)
+#   test run     one parallel job per planned test, each compiling its app
+#                and then simulating it       <- all three artifacts
 #
-# Build and Plan run in parallel. Every Test job restores the elaborated model
-# instead of rebuilding it and runs exactly what the plan says. Each job
-# publishes its junit.xml, so the run's Tests tab lists every test.
+# No job repeats an earlier stage's work: each restores the generated files
+# or the elaborated model it needs. Each test job publishes its junit.xml, so
+# the run's Tests tab lists every test.
 #
 # Create the pipeline in Azure DevOps from this file (ci/azure/regression.yml).
 
@@ -49,32 +52,27 @@ pool:
 stages:
 
 # -----------------------------------------------------------------------------
-- stage: Build
-  displayName: mcu-gen & elaboration
+- stage: McuGen
+  displayName: mcu-gen
   dependsOn: []
   jobs:
-  - job: build
-    displayName: mcu-gen & elaboration
-    timeoutInMinutes: 120
+  - job: gen
+    displayName: mcu-gen
+    timeoutInMinutes: 30
     steps:
     - template: setup.yml
     - script: |
         . .venv/bin/activate
-        python ci/run_flow.py ${{ parameters.regression }} --build-only --out $(OUT)
-      displayName: mcu-gen and elaboration
-    - publish: $(OUT)/build/sim-build.tar.gz
-      artifact: sim-build
-      displayName: Keep the elaborated model
+        python ci/run_flow.py ${{ parameters.regression }} --gen-only --out $(OUT)
+      displayName: mcu-gen
+    - publish: $(OUT)/build/mcu-gen.tar.gz
+      artifact: mcu-gen
+      displayName: Keep the generated files
     - publish: $(OUT)
-      artifact: build-logs
-      displayName: Build logs
+      artifact: mcu-gen-logs
+      displayName: mcu-gen logs
       condition: always()
 
-# -----------------------------------------------------------------------------
-- stage: Plan
-  displayName: test planning
-  dependsOn: []
-  jobs:
   - job: plan
     displayName: test planning
     timeoutInMinutes: 10
@@ -92,9 +90,35 @@ stages:
       displayName: Keep the test plan
 
 # -----------------------------------------------------------------------------
+- stage: Elaboration
+  displayName: elaboration
+  dependsOn: [McuGen]
+  jobs:
+  - job: elaborate
+    displayName: elaboration
+    timeoutInMinutes: 120
+    steps:
+    - template: setup.yml
+    - download: current
+      artifact: mcu-gen
+    - script: |
+        . .venv/bin/activate
+        python ci/run_flow.py ${{ parameters.regression }} --build-only \
+          --use-gen $(Pipeline.Workspace)/mcu-gen/mcu-gen.tar.gz \
+          --out $(OUT)
+      displayName: Elaboration
+    - publish: $(OUT)/build/sim-build.tar.gz
+      artifact: sim-build
+      displayName: Keep the elaborated model
+    - publish: $(OUT)
+      artifact: elaboration-logs
+      displayName: Elaboration logs
+      condition: always()
+
+# -----------------------------------------------------------------------------
 - stage: Test
   displayName: test run
-  dependsOn: [Build, Plan]
+  dependsOn: [McuGen, Elaboration]
   jobs:
 
   # Turns the kept plan into the matrix of the test jobs (a matrix can only
@@ -126,16 +150,25 @@ stages:
     steps:
     - template: setup.yml
     - download: current
-      artifact: sim-build
-    - download: current
       artifact: test-plan
+    - download: current
+      artifact: mcu-gen
+    - download: current
+      artifact: sim-build
     - script: |
         . .venv/bin/activate
         python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
-          --test $(TEST_NAME) \
+          --test $(TEST_NAME) --compile-only \
+          --use-gen $(Pipeline.Workspace)/mcu-gen/mcu-gen.tar.gz \
+          --out $(OUT)
+      displayName: Compile $(TEST_NAME)
+    - script: |
+        . .venv/bin/activate
+        python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
+          --test $(TEST_NAME) --sim-only \
           --use-build $(Pipeline.Workspace)/sim-build/sim-build.tar.gz \
           --out $(OUT)
-      displayName: Run $(TEST_NAME)
+      displayName: Simulate $(TEST_NAME)
     - task: PublishTestResults@2
       displayName: Test result
       condition: always()
