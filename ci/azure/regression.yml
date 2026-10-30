@@ -45,8 +45,12 @@ parameters:
   type: number
   default: 8
 
+# Paths: scripts run in the container, where the agent's folders are mounted
+# elsewhere than on the host. Scripts use paths relative to the checkout and
+# the agent's environment variables; only task inputs and publish use $(...)
+# macros, which the agent translates.
 variables:
-  OUT: $(Build.SourcesDirectory)/build/flow/ci
+  OUT: build/flow/ci
 
 # Every job runs on a Microsoft-hosted agent; the jobs that need the tools run
 # inside the image (util/docker/dockerfile)
@@ -70,10 +74,10 @@ stages:
         . .venv/bin/activate
         python ci/run_flow.py ${{ parameters.regression }} --gen-only --out $(OUT)
       displayName: mcu-gen
-    - publish: $(OUT)/build/mcu-gen.tar.gz
+    - publish: $(Build.SourcesDirectory)/$(OUT)/build/mcu-gen.tar.gz
       artifact: mcu-gen
       displayName: Keep the generated files
-    - publish: $(OUT)
+    - publish: $(Build.SourcesDirectory)/$(OUT)
       artifact: mcu-gen-logs
       displayName: mcu-gen logs
       condition: always()
@@ -86,7 +90,7 @@ stages:
     - template: setup.yml
     - script: |
         . .venv/bin/activate
-        set -- ${{ parameters.regression }} --plan $(Build.ArtifactStagingDirectory)/plan.json
+        set -- ${{ parameters.regression }} --plan $BUILD_ARTIFACTSTAGINGDIRECTORY/plan.json
         [ -n "$(echo '${{ parameters.tags }}' | xargs)" ] && set -- "$@" --tags '${{ parameters.tags }}'
         [ -n "$(echo '${{ parameters.excludeTags }}' | xargs)" ] && set -- "$@" --exclude-tags '${{ parameters.excludeTags }}'
         python ci/run_flow.py "$@"
@@ -111,13 +115,13 @@ stages:
     - script: |
         . .venv/bin/activate
         python ci/run_flow.py ${{ parameters.regression }} --build-only \
-          --use-gen $(Pipeline.Workspace)/mcu-gen/mcu-gen.tar.gz \
+          --use-gen $PIPELINE_WORKSPACE/mcu-gen/mcu-gen.tar.gz \
           --out $(OUT)
       displayName: Elaboration
-    - publish: $(OUT)/build/sim-build.tar.gz
+    - publish: $(Build.SourcesDirectory)/$(OUT)/build/sim-build.tar.gz
       artifact: sim-build
       displayName: Keep the elaborated model
-    - publish: $(OUT)
+    - publish: $(Build.SourcesDirectory)/$(OUT)
       artifact: elaboration-logs
       displayName: Elaboration logs
       condition: always()
@@ -165,16 +169,16 @@ stages:
       artifact: sim-build
     - script: |
         . .venv/bin/activate
-        python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
+        python ci/run_flow.py --from-plan $PIPELINE_WORKSPACE/test-plan/plan.json \
           --test $(TEST_NAME) --compile-only \
-          --use-gen $(Pipeline.Workspace)/mcu-gen/mcu-gen.tar.gz \
+          --use-gen $PIPELINE_WORKSPACE/mcu-gen/mcu-gen.tar.gz \
           --out $(OUT)
       displayName: Compile $(TEST_NAME)
     - script: |
         . .venv/bin/activate
-        python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
+        python ci/run_flow.py --from-plan $PIPELINE_WORKSPACE/test-plan/plan.json \
           --test $(TEST_NAME) --sim-only \
-          --use-build $(Pipeline.Workspace)/sim-build/sim-build.tar.gz \
+          --use-build $PIPELINE_WORKSPACE/sim-build/sim-build.tar.gz \
           --out $(OUT)
       displayName: Simulate $(TEST_NAME)
     - task: PublishTestResults@2
@@ -182,10 +186,10 @@ stages:
       condition: always()
       inputs:
         testResultsFormat: JUnit
-        testResultsFiles: $(OUT)/junit.xml
+        testResultsFiles: $(Build.SourcesDirectory)/$(OUT)/junit.xml
         testRunTitle: $(TEST_NAME)
         failTaskOnFailedTests: false
-    - publish: $(OUT)
+    - publish: $(Build.SourcesDirectory)/$(OUT)
       artifact: test-$(TEST_NAME)
       displayName: Test artifacts
       condition: always()
