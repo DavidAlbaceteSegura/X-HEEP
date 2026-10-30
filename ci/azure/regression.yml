@@ -46,15 +46,16 @@ parameters:
 variables:
   OUT: $(Build.SourcesDirectory)/build/flow/ci
 
-pool:
-  name: ${{ parameters.pool }}
-
+# The pool is set per stage: Azure does not take a template expression in the
+# pipeline-level pool
 stages:
 
 # -----------------------------------------------------------------------------
 - stage: McuGen
   displayName: mcu-gen
   dependsOn: []
+  pool:
+    name: ${{ parameters.pool }}
   jobs:
   - job: gen
     displayName: mcu-gen
@@ -93,6 +94,8 @@ stages:
 - stage: Elaboration
   displayName: elaboration
   dependsOn: [McuGen]
+  pool:
+    name: ${{ parameters.pool }}
   jobs:
   - job: elaborate
     displayName: elaboration
@@ -119,6 +122,8 @@ stages:
 - stage: Test
   displayName: test run
   dependsOn: [McuGen, Elaboration]
+  pool:
+    name: ${{ parameters.pool }}
   jobs:
 
   # Turns the kept plan into the matrix of the test jobs (a matrix can only
