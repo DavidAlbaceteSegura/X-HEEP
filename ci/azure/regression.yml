@@ -16,7 +16,7 @@
 # the run's Tests tab lists every test.
 #
 # The tools come from the x-heep-toolchain image (parameter image), run on
-# Microsoft-hosted agents. Create the pipeline in Azure DevOps from this file
+# Microsoft-hosted agents (see setup.yml). Create the pipeline in Azure DevOps from this file
 # (ci/azure/regression.yml).
 
 trigger:
@@ -45,15 +45,13 @@ parameters:
   type: number
   default: 8
 
-# Paths: scripts run in the container, where the agent's folders are mounted
-# elsewhere than on the host. Scripts use paths relative to the checkout and
-# the agent's environment variables; only task inputs and publish use $(...)
-# macros, which the agent translates.
 variables:
-  OUT: build/flow/ci
+  OUT: build/flow/ci  # relative to the checkout
+  XHEEP_IMAGE: ${{ parameters.image }}
 
-# Every job runs on a Microsoft-hosted agent; the jobs that need the tools run
-# inside the image (util/docker/dockerfile)
+# Every job runs on a Microsoft-hosted agent; the commands that need the tools
+# run in the image (util/docker/dockerfile) through ci/azure/in-image.sh, see
+# setup.yml
 pool:
   vmImage: ubuntu-latest
 
@@ -65,14 +63,13 @@ stages:
   dependsOn: []
   jobs:
   - job: gen
-    container: ${{ parameters.image }}
     displayName: mcu-gen
     timeoutInMinutes: 30
     steps:
     - template: setup.yml
     - script: |
-        . .venv/bin/activate
-        python ci/run_flow.py ${{ parameters.regression }} --gen-only --out $(OUT)
+        ci/azure/in-image.sh '. .venv/bin/activate &&
+          python ci/run_flow.py ${{ parameters.regression }} --gen-only --out $(OUT)'
       displayName: mcu-gen
     - publish: $(Build.SourcesDirectory)/$(OUT)/build/mcu-gen.tar.gz
       artifact: mcu-gen
@@ -83,14 +80,15 @@ stages:
       condition: always()
 
   - job: plan
-    container: ${{ parameters.image }}
     displayName: test planning
     timeoutInMinutes: 10
     steps:
     - template: setup.yml
+      parameters:
+        inImage: false
     - script: |
         . .venv/bin/activate
-        set -- ${{ parameters.regression }} --plan $BUILD_ARTIFACTSTAGINGDIRECTORY/plan.json
+        set -- ${{ parameters.regression }} --plan $(Build.ArtifactStagingDirectory)/plan.json
         [ -n "$(echo '${{ parameters.tags }}' | xargs)" ] && set -- "$@" --tags '${{ parameters.tags }}'
         [ -n "$(echo '${{ parameters.excludeTags }}' | xargs)" ] && set -- "$@" --exclude-tags '${{ parameters.excludeTags }}'
         python ci/run_flow.py "$@"
@@ -105,7 +103,6 @@ stages:
   dependsOn: [McuGen]
   jobs:
   - job: elaborate
-    container: ${{ parameters.image }}
     displayName: elaboration
     timeoutInMinutes: 120
     steps:
@@ -113,10 +110,9 @@ stages:
     - download: current
       artifact: mcu-gen
     - script: |
-        . .venv/bin/activate
-        python ci/run_flow.py ${{ parameters.regression }} --build-only \
-          --use-gen $PIPELINE_WORKSPACE/mcu-gen/mcu-gen.tar.gz \
-          --out $(OUT)
+        ci/azure/in-image.sh '. .venv/bin/activate &&
+          python ci/run_flow.py ${{ parameters.regression }} --build-only \
+          --use-gen $(Pipeline.Workspace)/mcu-gen/mcu-gen.tar.gz --out $(OUT)'
       displayName: Elaboration
     - publish: $(Build.SourcesDirectory)/$(OUT)/build/sim-build.tar.gz
       artifact: sim-build
@@ -152,7 +148,6 @@ stages:
       displayName: Matrix from the plan
 
   - job: test
-    container: ${{ parameters.image }}
     displayName: test
     dependsOn: load_plan
     timeoutInMinutes: 60
@@ -168,18 +163,16 @@ stages:
     - download: current
       artifact: sim-build
     - script: |
-        . .venv/bin/activate
-        python ci/run_flow.py --from-plan $PIPELINE_WORKSPACE/test-plan/plan.json \
+        ci/azure/in-image.sh '. .venv/bin/activate &&
+          python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
           --test $(TEST_NAME) --compile-only \
-          --use-gen $PIPELINE_WORKSPACE/mcu-gen/mcu-gen.tar.gz \
-          --out $(OUT)
+          --use-gen $(Pipeline.Workspace)/mcu-gen/mcu-gen.tar.gz --out $(OUT)'
       displayName: Compile $(TEST_NAME)
     - script: |
-        . .venv/bin/activate
-        python ci/run_flow.py --from-plan $PIPELINE_WORKSPACE/test-plan/plan.json \
+        ci/azure/in-image.sh '. .venv/bin/activate &&
+          python ci/run_flow.py --from-plan $(Pipeline.Workspace)/test-plan/plan.json \
           --test $(TEST_NAME) --sim-only \
-          --use-build $PIPELINE_WORKSPACE/sim-build/sim-build.tar.gz \
-          --out $(OUT)
+          --use-build $(Pipeline.Workspace)/sim-build/sim-build.tar.gz --out $(OUT)'
       displayName: Simulate $(TEST_NAME)
     - task: PublishTestResults@2
       displayName: Test result

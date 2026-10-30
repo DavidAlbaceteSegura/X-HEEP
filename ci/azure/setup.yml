@@ -2,20 +2,35 @@
 # Solderpad Hardware License, Version 2.1, see LICENSE.md for details.
 # SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 #
-# Steps shared by every job running in the x-heep-toolchain image: checkout,
-# tools on PATH and Python environment.
+# Steps shared by every job: checkout, tools image and Python environment.
+#
+# The tools image is far bigger than the free disk of a Microsoft-hosted
+# agent, so it cannot be the job's container (pulled before any step): the
+# job frees disk space first, then runs its commands in the image with
+# ci/azure/in-image.sh.
+
+parameters:
+- name: inImage  # false: the job only needs Python, it runs on the agent
+  type: boolean
+  default: true
 
 steps:
 - checkout: self
   fetchDepth: 1
   clean: true
 
-# The image sets $RISCV_XHEEP and lists its tool directories in $TOOL_PATH, but
-# only its login shell (env.sh) adds them to PATH
-- script: |
-    for dir in ${TOOL_PATH//:/ }; do echo "##vso[task.prependpath]$dir"; done
-    git config --global --add safe.directory '*'
-  displayName: Tools on PATH
+- ${{ if parameters.inImage }}:
+  - script: |
+      df -h / | tail -1
+      sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      docker image prune -af > /dev/null
+      df -h / | tail -1
+    displayName: Free disk space for the tools image
+  - script: docker pull -q $(XHEEP_IMAGE)
+    displayName: Pull the tools image
+  - script: ci/azure/in-image.sh 'make venv REQUIREMENTS_TXT=util/python-requirements.txt'
+    displayName: Python environment
 
-- script: make venv REQUIREMENTS_TXT=util/python-requirements.txt
-  displayName: Python environment
+- ${{ else }}:
+  - script: make venv REQUIREMENTS_TXT=util/python-requirements.txt
+    displayName: Python environment
